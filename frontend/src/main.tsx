@@ -1,10 +1,16 @@
-import { StrictMode } from 'react'
-import { createRoot } from 'react-dom/client'
-import './index.css'
-import App from './App.tsx'
+import { StrictMode } from 'react';
+import { createRoot } from 'react-dom/client';
+import { MantineProvider } from '@mantine/core';
+import './index.css';
+import App from './App.tsx';
 
-createRoot(document.getElementById('root')!).render(
+const rootElement = document.getElementById('root')!;
+rootElement.className = 'min-h-screen flex items-center justify-center p-5';
+
+createRoot(rootElement).render(
   <StrictMode>
-    <App />
-  </StrictMode>,
-)
+    <MantineProvider>
+      <App />
+    </MantineProvider>
+  </StrictMode>
+);
