@@ -4,7 +4,7 @@ import { MantineProvider } from '@mantine/core';
 import './index.css';
 import App from './App.tsx';
 
-const rootElement = document.getElementById('root')!;
+const rootElement: HTMLElement = document.getElementById('root')!;
 rootElement.className = 'min-h-screen flex items-center justify-center p-5';
 
 createRoot(rootElement).render(

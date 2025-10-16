@@ -11,26 +11,26 @@ import {
   Center,
 } from '@mantine/core';
 import { Dropzone } from '@mantine/dropzone';
-import type { FileWithPath } from '@mantine/dropzone';
+import type { FileWithPath, FileRejection } from '@mantine/dropzone';
 import { IconUpload, IconX, IconPhoto } from '@tabler/icons-react';
 
-function App() {
+function App(): React.JSX.Element {
   const [files, setFiles] = useState<FileWithPath[]>([]);
   const [preview, setPreview] = useState<string | null>(null);
 
-  const handleDrop = (acceptedFiles: FileWithPath[]) => {
+  const handleDrop = (acceptedFiles: FileWithPath[]): void => {
     setFiles(acceptedFiles);
     if (acceptedFiles.length > 0) {
       const file = acceptedFiles[0];
       const reader = new FileReader();
-      reader.onload = (e) => {
+      reader.onload = (e: ProgressEvent<FileReader>) => {
         setPreview(e.target?.result as string);
       };
       reader.readAsDataURL(file);
     }
   };
 
-  const handleRemove = () => {
+  const handleRemove = (): void => {
     setFiles([]);
     setPreview(null);
   };
@@ -49,7 +49,7 @@ function App() {
 
           <Dropzone
             onDrop={handleDrop}
-            onReject={(files: any) => console.log('rejected files', files)}
+            onReject={(files: FileRejection[]) => console.log('rejected files', files)}
             maxSize={5 * 1024 * 1024} // 5MB
             accept={{
               'image/*': ['.png', '.jpg', '.jpeg', '.gif', '.webp'],
