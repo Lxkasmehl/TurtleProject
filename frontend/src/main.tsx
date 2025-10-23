@@ -5,7 +5,6 @@ import './index.css';
 import App from './App.tsx';
 
 const rootElement: HTMLElement = document.getElementById('root')!;
-rootElement.className = 'min-h-screen flex items-center justify-center p-5';
 
 createRoot(rootElement).render(
   <StrictMode>
