@@ -88,7 +88,7 @@ export default function HomePage() {
                 style={{ maxWidth: '100%', height: 'auto' }}
               />
               <Button
-                color='red'
+                color='green'
                 variant='light'
                 onClick={handleRemove}
                 leftSection={<IconX size={16} />}

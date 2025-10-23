@@ -31,7 +31,7 @@ export default function AboutPage() {
               size='sm'
               center
               icon={
-                <ThemeIcon color='teal' size={24} radius='xl'>
+                <ThemeIcon color='green' size={24} radius='xl'>
                   <IconCheck size={16} />
                 </ThemeIcon>
               }
@@ -49,7 +49,7 @@ export default function AboutPage() {
             <Title order={3}>Technologies Used</Title>
             <Group justify='center' gap='xl'>
               <Stack align='center' gap='xs'>
-                <ThemeIcon size='xl' radius='xl' color='blue'>
+                <ThemeIcon size='xl' radius='xl' color='green'>
                   <IconCode size={24} />
                 </ThemeIcon>
                 <Text size='sm' ta='center'>
@@ -57,7 +57,7 @@ export default function AboutPage() {
                 </Text>
               </Stack>
               <Stack align='center' gap='xs'>
-                <ThemeIcon size='xl' radius='xl' color='grape'>
+                <ThemeIcon size='xl' radius='xl' color='teal'>
                   <IconPalette size={24} />
                 </ThemeIcon>
                 <Text size='sm' ta='center'>
@@ -65,7 +65,7 @@ export default function AboutPage() {
                 </Text>
               </Stack>
               <Stack align='center' gap='xs'>
-                <ThemeIcon size='xl' radius='xl' color='green'>
+                <ThemeIcon size='xl' radius='xl' color='sand'>
                   <IconRocket size={24} />
                 </ThemeIcon>
                 <Text size='sm' ta='center'>

@@ -1,4 +1,3 @@
-import { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import {
   AppShell,
@@ -55,10 +54,12 @@ export default function Navigation({ children }: NavigationProps) {
       variant={variant}
       leftSection={<item.icon size={16} />}
       onClick={() => handleNavigation(item.path)}
+      color={location.pathname === item.path ? 'green' : undefined}
       style={{
         backgroundColor:
-          location.pathname === item.path ? theme.colors.blue[6] : 'transparent',
+          location.pathname === item.path ? theme.colors.green[6] : 'transparent',
         color: location.pathname === item.path ? 'white' : undefined,
+        transition: 'all 0.2s ease',
       }}
     >
       {item.label}
@@ -69,7 +70,12 @@ export default function Navigation({ children }: NavigationProps) {
     <AppShell header={{ height: 60 }} padding='md'>
       <AppShell.Header>
         <Group h='100%' px='md' justify='space-between'>
-          <Text size='lg' fw={700}>
+          <Text
+            size='lg'
+            fw={700}
+            style={{ cursor: 'pointer' }}
+            onClick={() => handleNavigation('/')}
+          >
             Turtle Project
           </Text>
 
@@ -95,13 +101,7 @@ export default function Navigation({ children }: NavigationProps) {
       </AppShell.Header>
 
       {/* Mobile Drawer */}
-      <Drawer
-        opened={opened}
-        onClose={close}
-        position='right'
-        title='Navigation'
-        size='sm'
-      >
+      <Drawer opened={opened} onClose={close} position='right' size='xs'>
         <Stack gap='xs'>
           {navigationItems.map((item) => (
             <NavButton key={item.path} item={item} variant='light' />

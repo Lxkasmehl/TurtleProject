@@ -76,7 +76,7 @@ export default function ContactPage() {
               />
 
               <Group justify='center' mt='md'>
-                <Button type='submit' size='md'>
+                <Button type='submit' size='md' color='green'>
                   Send Message
                 </Button>
               </Group>
