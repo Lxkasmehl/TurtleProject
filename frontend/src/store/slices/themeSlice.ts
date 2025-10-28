@@ -1,6 +1,5 @@
-import { type ReactNode } from 'react';
-import { MantineProvider, createTheme } from '@mantine/core';
-import { useUser } from '../hooks/useUser';
+import { createSlice, type PayloadAction } from '@reduxjs/toolkit';
+import { createTheme } from '@mantine/core';
 
 // Community theme (blue-based)
 const communityTheme = createTheme({
@@ -40,13 +39,24 @@ const adminTheme = createTheme({
   },
 });
 
-interface ThemeProviderProps {
-  children: ReactNode;
+interface ThemeState {
+  themeType: 'community' | 'admin';
 }
 
-export function ThemeProvider({ children }: ThemeProviderProps) {
-  const { role } = useUser();
-  const currentTheme = role === 'admin' ? adminTheme : communityTheme;
+const initialState: ThemeState = {
+  themeType: 'community',
+};
 
-  return <MantineProvider theme={currentTheme}>{children}</MantineProvider>;
-}
+const themeSlice = createSlice({
+  name: 'theme',
+  initialState,
+  reducers: {
+    setThemeType: (state, action: PayloadAction<'community' | 'admin'>) => {
+      state.themeType = action.payload;
+    },
+  },
+});
+
+export const { setThemeType } = themeSlice.actions;
+export { communityTheme, adminTheme };
+export default themeSlice.reducer;

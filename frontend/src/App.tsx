@@ -1,16 +1,26 @@
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+import { Provider } from 'react-redux';
+import { MantineProvider } from '@mantine/core';
 import '@mantine/core/styles.css';
 import Navigation from './components/Navigation';
 import HomePage from './pages/HomePage';
 import AboutPage from './pages/AboutPage';
 import ContactPage from './pages/ContactPage';
 import LoginPage from './pages/LoginPage';
-import { UserProvider } from './hooks/useUser';
-import { ThemeProvider } from './contexts/ThemeProvider';
+import { store } from './store';
+import { useAppSelector } from './store/hooks';
+import { communityTheme, adminTheme } from './store/slices/themeSlice';
+
+function ThemeProvider({ children }: { children: React.ReactNode }) {
+  const { role } = useAppSelector((state) => state.user);
+  const currentTheme = role === 'admin' ? adminTheme : communityTheme;
+
+  return <MantineProvider theme={currentTheme}>{children}</MantineProvider>;
+}
 
 function App(): React.JSX.Element {
   return (
-    <UserProvider>
+    <Provider store={store}>
       <ThemeProvider>
         <Router>
           <Navigation>
@@ -23,7 +33,7 @@ function App(): React.JSX.Element {
           </Navigation>
         </Router>
       </ThemeProvider>
-    </UserProvider>
+    </Provider>
   );
 }
 
