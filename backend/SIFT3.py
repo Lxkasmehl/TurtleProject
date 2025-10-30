@@ -5,9 +5,16 @@ import numpy as np
 import os
 import tkinter as tk
 from tkinter import Tk, filedialog, Label
+from vlad_utils import build_vocabulary, compute_vlad
 from PIL import Image, ImageTk
+from sklearn.decomposition import PCA
+import matplotlib.pyplot as plt
+import plotly.express as px
+import pandas as pd
 
 SIFT_RESULT_PATH = "../../../Desktop/SIFT RESULTS/"
+all_descriptors = []
+vlad_vectors = []
 
 def select_several_images():
     root = Tk()
@@ -63,6 +70,7 @@ def choose_image_path():
     return file_path if file_path else None
 
 def SIFT():
+    global all_descriptors, vlad_vectors
     image_paths = []
     image_paths = select_several_images()
     while image_paths:
@@ -74,6 +82,15 @@ def SIFT():
         keypoints = sift.detect(imgGray,None)
         imgGray = cv.drawKeypoints(imgGray,keypoints,imgGray,flags=cv.DRAW_MATCHES_FLAGS_DRAW_RICH_KEYPOINTS)
         keypoints, descriptors = sift.detectAndCompute(imgGray, None)
+
+        #store descriptors for vlad training
+        if descriptors is not None:
+            all_descriptors.append(descriptors)
+
+        if 'kmeans' in globals():
+            vlad = compute_vlad(keypoints, descriptors)
+            vlad_vectors.append((image_path, vlad))
+
 
         #serializing keypoints for saving
         kp_array = np.array([
@@ -91,6 +108,7 @@ def SIFT():
         #plt.imshow(imgGray)
         #plt.title(f"Keypoints: {len(keypoints)}")
         #plt.show()
+    print("All Done.")
 
 def SIFT_from_file(file_paths):
     sift_data = []
@@ -126,7 +144,7 @@ def matching_SIFT_files():
             img2, kp2, des2, name2 = sift_data[j]
 
             matches = bf.knnMatch(des1, des2, k=2)
-            good_matches = [m for m, n in matches if m.distance < 0.75 * n.distance]
+            good_matches = [m for m, n in matches if m.distance < 0.70 * n.distance]
         if len(good_matches) >= MIN_MATCH_COUNT:
             matched_img = cv.drawMatches(img1, kp1, img2, kp2, good_matches, None,
                                          flags=cv.DrawMatchesFlags_NOT_DRAW_SINGLE_POINTS)
@@ -137,6 +155,72 @@ def matching_SIFT_files():
             plt.show()
         else:
             print(f"Skipped: {name1} ↔ {name2} | Only {len(good_matches)} good matches")
+
+
+def PCA_VLAD_clusters():
+    global all_descriptors, vlad_vectors, kmeans
+
+    file_paths = [os.path.join(SIFT_RESULT_PATH, f) for f in os.listdir(SIFT_RESULT_PATH) if f.endswith(".npz")]
+    sift_data = SIFT_from_file(file_paths)
+
+    all_descriptors = [des for _, _, des, _ in sift_data if des is not None]
+    all_descriptors = np.vstack(all_descriptors)
+
+    # Train vocabulary
+    kmeans = build_vocabulary(all_descriptors, num_clusters=64)
+
+    # Encode VLAD vectors
+    vlad_vectors = []
+    for _, _, des, name in sift_data:
+        if des is not None:
+            vlad = compute_vlad(des, kmeans)
+            vlad_vectors.append((name, vlad))
+
+    # PCA plot
+    vectors = np.array([v for _, v in vlad_vectors])
+    labels = [name for name, _ in vlad_vectors]
+    reduced = PCA(n_components=2).fit_transform(vectors)
+
+    plt.figure(figsize=(10, 6))
+    plt.scatter(reduced[:, 0], reduced[:, 1])
+    for i, label in enumerate(labels):
+        plt.annotate(label, (reduced[i, 0], reduced[i, 1]))
+    plt.title("Turtle Cluster Map via VLAD + PCA")
+    plt.show()
+
+def plotly_VLAD_clusters():
+    global all_descriptors, vlad_vectors, kmeans
+
+    file_paths = [os.path.join(SIFT_RESULT_PATH, f) for f in os.listdir(SIFT_RESULT_PATH) if f.endswith(".npz")]
+    sift_data = SIFT_from_file(file_paths)
+
+    all_descriptors = [des for _, _, des, _ in sift_data if des is not None]
+    all_descriptors = np.vstack(all_descriptors)
+
+    # Train vocabulary
+    kmeans = build_vocabulary(all_descriptors, num_clusters=64)
+
+    # Encode VLAD vectors
+    vlad_vectors = []
+    for _, _, des, name in sift_data:
+        if des is not None:
+            vlad = compute_vlad(des, kmeans)
+            vlad_vectors.append((name, vlad))
+
+    # PCA reduction
+    vectors = np.array([v for _, v in vlad_vectors])
+    labels = [name for name, _ in vlad_vectors]
+    reduced = PCA(n_components=2).fit_transform(vectors)
+
+    # Create DataFrame for Plotly
+    df = pd.DataFrame(reduced, columns=["x", "y"])
+    df["label"] = labels
+
+    # Plot with Plotly
+    fig = px.scatter(df, x="x", y="y", text="label", title="Turtle Cluster Map via VLAD + PCA")
+    fig.update_traces(textposition='top center')
+    fig.update_layout(height=600, width=900)
+    fig.show()
 
 
 def begin_here():
@@ -151,6 +235,10 @@ def begin_here():
     button1.pack(pady=20)
     button2 = tk.Button(frame1, text="Match SIFT", command=matching_SIFT_files)
     button2.pack(pady=20)
+    button3 = tk.Button(frame1, text="Plotly Turtle Clusters", command=plotly_VLAD_clusters)
+    button3.pack(pady=20)
+    button3 = tk.Button(frame1, text="PCA Turtle Clusters", command=PCA_VLAD_clusters)
+    button3.pack(pady=20)
     root.mainloop()
 
 
