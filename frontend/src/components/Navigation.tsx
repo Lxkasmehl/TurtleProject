@@ -63,6 +63,7 @@ export default function Navigation({ children }: NavigationProps) {
       color={
         location.pathname === item.path ? (role === 'admin' ? 'red' : 'blue') : undefined
       }
+      data-active={location.pathname === item.path ? 'true' : 'false'}
       style={{
         backgroundColor:
           location.pathname === item.path
@@ -93,6 +94,7 @@ export default function Navigation({ children }: NavigationProps) {
               Turtle Project
             </Text>
             <Badge
+              data-testid='role-badge'
               color={role === 'admin' ? 'red' : 'blue'}
               leftSection={
                 role === 'admin' ? <IconShield size={12} /> : <IconUser size={12} />
@@ -148,7 +150,14 @@ export default function Navigation({ children }: NavigationProps) {
             </ActionIcon>
 
             {/* Mobile Burger Menu */}
-            {isMobile && <Burger opened={opened} onClick={toggle} size='sm' />}
+            {isMobile && (
+              <Burger
+                data-testid='mobile-menu-button'
+                opened={opened}
+                onClick={toggle}
+                size='sm'
+              />
+            )}
           </Group>
         </Group>
       </AppShell.Header>
