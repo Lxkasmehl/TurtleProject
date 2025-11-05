@@ -4,6 +4,13 @@
  * Will be replaced by real backend API later
  */
 
+export interface PhotoLocation {
+  latitude: number;
+  longitude: number;
+  address?: string; // Formatted address from reverse geocoding
+  accuracy?: number; // Accuracy in meters
+}
+
 export interface UploadedPhoto {
   imageId: string;
   fileName: string;
@@ -12,6 +19,7 @@ export interface UploadedPhoto {
   preview: string; // Base64 data URL
   timestamp: string;
   uploadDate: string; // Formatted date
+  location?: PhotoLocation; // Optional location data
 }
 
 export interface UploadResponse {
@@ -21,6 +29,7 @@ export interface UploadResponse {
   timestamp?: string;
   isDuplicate?: boolean;
   previousUploadDate?: string;
+  duplicateImageId?: string; // ID of the duplicate photo for navigation
 }
 
 export interface UploadError {
@@ -165,14 +174,111 @@ export function checkDuplicatePhoto(file: File): UploadedPhoto | null {
 }
 
 /**
+ * Get all duplicate photos (all versions with the same hash)
+ * @param file - The file to find duplicates for
+ * @returns Array of all duplicate photos including the current one
+ */
+export function getAllDuplicatePhotos(file: File): UploadedPhoto[] {
+  const photos = getAllUploadedPhotos();
+  const fileHash = generateFileHash(file);
+
+  return photos.filter((photo) => {
+    const photoHash = generateFileHash({
+      name: photo.fileName,
+      size: photo.fileSize,
+      type: photo.fileType,
+    } as File);
+    return photoHash === fileHash;
+  });
+}
+
+/**
+ * Get all duplicate photos by image ID
+ * @param imageId - The image ID to find duplicates for
+ * @returns Array of all duplicate photos
+ */
+export function getDuplicatePhotosByImageId(imageId: string): UploadedPhoto[] {
+  const photos = getAllUploadedPhotos();
+  const photo = photos.find((p) => p.imageId === imageId);
+  if (!photo) return [];
+
+  const fileHash = generateFileHash({
+    name: photo.fileName,
+    size: photo.fileSize,
+    type: photo.fileType,
+  } as File);
+
+  return photos.filter((p) => {
+    const pHash = generateFileHash({
+      name: p.fileName,
+      size: p.fileSize,
+      type: p.fileType,
+    } as File);
+    return pHash === fileHash;
+  });
+}
+
+/**
+ * Get current geolocation
+ * @returns Promise with location data or null if unavailable
+ */
+export function getCurrentLocation(): Promise<PhotoLocation | null> {
+  return new Promise((resolve) => {
+    if (!navigator.geolocation) {
+      console.warn('Geolocation is not supported by this browser');
+      resolve(null);
+      return;
+    }
+
+    navigator.geolocation.getCurrentPosition(
+      async (position) => {
+        const location: PhotoLocation = {
+          latitude: position.coords.latitude,
+          longitude: position.coords.longitude,
+          accuracy: position.coords.accuracy,
+        };
+
+        // Try to get address from reverse geocoding
+        try {
+          const response = await fetch(
+            `https://nominatim.openstreetmap.org/reverse?format=json&lat=${location.latitude}&lon=${location.longitude}&zoom=18&addressdetails=1`
+          );
+          if (response.ok) {
+            const data = await response.json();
+            if (data.display_name) {
+              location.address = data.display_name;
+            }
+          }
+        } catch (error) {
+          console.warn('Failed to get address from reverse geocoding:', error);
+        }
+
+        resolve(location);
+      },
+      (error) => {
+        console.warn('Geolocation error:', error);
+        resolve(null);
+      },
+      {
+        enableHighAccuracy: true,
+        timeout: 10000,
+        maximumAge: 0,
+      }
+    );
+  });
+}
+
+/**
  * Simulates a photo upload to the backend
  * @param file - The image file to upload
  * @param checkDuplicate - Whether to check for duplicates (for admin)
+ * @param location - Optional location data (will be fetched if not provided)
  * @returns Promise with upload response or error
  */
 export async function uploadPhoto(
   file: File,
-  checkDuplicate: boolean = false
+  checkDuplicate: boolean = false,
+  location?: PhotoLocation | null
 ): Promise<UploadResponse | UploadError> {
   // Simulate network latency (1-3 seconds)
   // Latency can vary based on file size
@@ -233,6 +339,7 @@ export async function uploadPhoto(
         preview,
         timestamp,
         uploadDate: formattedDate,
+        location: location || undefined, // Save location if provided
       };
 
       if (!duplicatePhoto) {
@@ -240,18 +347,26 @@ export async function uploadPhoto(
         saveUploadedPhoto(uploadedPhoto).catch((error) => {
           console.error('Failed to save photo to storage:', error);
         });
+      } else {
+        // Duplicate photo - also save it with new location/timestamp
+        // This allows tracking multiple sightings of the same turtle
+        uploadedPhoto.location = location || duplicatePhoto.location || undefined;
+        saveUploadedPhoto(uploadedPhoto).catch((error) => {
+          console.error('Failed to save duplicate photo to storage:', error);
+        });
       }
 
       // Prepare response
       if (duplicatePhoto) {
-        // Photo was already uploaded
+        // Photo was already uploaded - return the first duplicate's ID for navigation
         resolve({
           success: true,
-          message: `Photo "${file.name}" was already uploaded on ${duplicatePhoto.uploadDate}`,
-          imageId: duplicatePhoto.imageId,
+          message: `Turtle match found! This photo was already uploaded on ${duplicatePhoto.uploadDate}`,
+          imageId: duplicatePhoto.imageId, // Return the first duplicate's ID
           timestamp: duplicatePhoto.timestamp,
           isDuplicate: true,
           previousUploadDate: duplicatePhoto.uploadDate,
+          duplicateImageId: duplicatePhoto.imageId, // ID for navigation to match page
         });
       } else {
         // New photo

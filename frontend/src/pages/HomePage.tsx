@@ -30,13 +30,15 @@ import {
   IconSparkles,
 } from '@tabler/icons-react';
 import { useState, useRef, useEffect } from 'react';
-import { uploadPhoto, validateFile } from '../services/mockBackend';
+import { useNavigate } from 'react-router-dom';
+import { uploadPhoto, validateFile, getCurrentLocation } from '../services/mockBackend';
 import { useUser } from '../hooks/useUser';
 
 type UploadState = 'idle' | 'uploading' | 'success' | 'error';
 
 export default function HomePage() {
   const { role } = useUser();
+  const navigate = useNavigate();
   const [files, setFiles] = useState<FileWithPath[]>([]);
   const [preview, setPreview] = useState<string | null>(null);
   const [uploadState, setUploadState] = useState<UploadState>('idle');
@@ -45,6 +47,7 @@ export default function HomePage() {
   const [imageId, setImageId] = useState<string | null>(null);
   const [isDuplicate, setIsDuplicate] = useState(false);
   const [previousUploadDate, setPreviousUploadDate] = useState<string | null>(null);
+  const [isGettingLocation, setIsGettingLocation] = useState(false);
   const progressIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const handleDrop = (acceptedFiles: FileWithPath[]): void => {
@@ -118,8 +121,24 @@ export default function HomePage() {
     }, 200);
 
     try {
+      // Get location if available (for admin, always try to get location)
+      let location = null;
+      if (role === 'admin') {
+        setIsGettingLocation(true);
+        try {
+          location = await getCurrentLocation();
+          if (!location) {
+            console.warn('Location not available or denied by user');
+          }
+        } catch (error) {
+          console.warn('Failed to get location:', error);
+        } finally {
+          setIsGettingLocation(false);
+        }
+      }
+
       // For admin, check for duplicates
-      const response = await uploadPhoto(file, role === 'admin');
+      const response = await uploadPhoto(file, role === 'admin', location);
 
       // Clear interval and set to 100%
       if (progressIntervalRef.current) {
@@ -129,22 +148,24 @@ export default function HomePage() {
       setUploadProgress(100);
 
       if (response.success) {
+        // If duplicate detected and admin, navigate to match page
+        if (response.isDuplicate && role === 'admin' && response.duplicateImageId) {
+          // Navigate to turtle match page
+          navigate(`/admin/turtle-match/${response.duplicateImageId}`);
+          return;
+        }
+
         setUploadState('success');
         setUploadResponse(response.message);
         setImageId(response.imageId || null);
         setIsDuplicate(response.isDuplicate || false);
         setPreviousUploadDate(response.previousUploadDate || null);
 
-        const notificationColor = response.isDuplicate ? 'orange' : 'green';
-        const notificationTitle = response.isDuplicate
-          ? 'Duplicate Photo Detected'
-          : 'Upload Successful! 🎉';
-
         notifications.show({
-          title: notificationTitle,
+          title: 'Upload Successful! 🎉',
           message: response.message,
-          color: notificationColor,
-          icon: response.isDuplicate ? <IconClock size={18} /> : <IconCheck size={18} />,
+          color: 'green',
+          icon: <IconCheck size={18} />,
           autoClose: 5000,
         });
       } else {
@@ -306,7 +327,7 @@ export default function HomePage() {
                       <Stack gap='xs'>
                         <Group justify='space-between'>
                           <Text size='sm' fw={500}>
-                            Uploading...
+                            {isGettingLocation ? 'Getting location...' : 'Uploading...'}
                           </Text>
                           <Text size='sm' c='dimmed'>
                             {uploadProgress}%
@@ -316,6 +337,11 @@ export default function HomePage() {
                         <Center>
                           <Loader size='sm' />
                         </Center>
+                        {isGettingLocation && role === 'admin' && (
+                          <Text size='xs' c='dimmed' ta='center'>
+                            Please allow location access to track turtle sightings
+                          </Text>
+                        )}
                       </Stack>
                     )}
 
