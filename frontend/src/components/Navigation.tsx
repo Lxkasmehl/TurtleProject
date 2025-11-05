@@ -22,6 +22,7 @@ import {
   IconLogin,
   IconUser,
   IconShield,
+  IconPhoto,
 } from '@tabler/icons-react';
 import { useUser } from '../hooks/useUser';
 
@@ -111,6 +112,16 @@ export default function Navigation({ children }: NavigationProps) {
               {navigationItems.map((item) => (
                 <NavButton key={item.path} item={item} />
               ))}
+              {/* Admin Turtle Records Link - only visible for admins */}
+              {role === 'admin' && (
+                <NavButton
+                  item={{
+                    label: 'Turtle Records',
+                    path: '/admin/turtle-records',
+                    icon: IconPhoto,
+                  }}
+                />
+              )}
             </Group>
           )}
 
@@ -170,6 +181,17 @@ export default function Navigation({ children }: NavigationProps) {
             {navigationItems.map((item) => (
               <NavButton key={item.path} item={item} variant='light' />
             ))}
+            {/* Admin Turtle Records Link - only visible for admins */}
+            {role === 'admin' && (
+              <NavButton
+                item={{
+                  label: 'Turtle Records',
+                  path: '/admin/turtle-records',
+                  icon: IconPhoto,
+                }}
+                variant='light'
+              />
+            )}
           </Stack>
 
           {/* Login link pushed to bottom */}

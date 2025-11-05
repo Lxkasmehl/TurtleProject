@@ -1,12 +1,15 @@
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import { Provider } from 'react-redux';
 import { MantineProvider } from '@mantine/core';
+import { Notifications } from '@mantine/notifications';
 import '@mantine/core/styles.css';
+import '@mantine/notifications/styles.css';
 import Navigation from './components/Navigation';
 import HomePage from './pages/HomePage';
 import AboutPage from './pages/AboutPage';
 import ContactPage from './pages/ContactPage';
 import LoginPage from './pages/LoginPage';
+import AdminTurtleRecordsPage from './pages/AdminTurtleRecordsPage';
 import { store } from './store';
 import { useAppSelector } from './store/hooks';
 import { communityTheme, adminTheme } from './store/slices/themeSlice';
@@ -22,6 +25,7 @@ function App(): React.JSX.Element {
   return (
     <Provider store={store}>
       <ThemeProvider>
+        <Notifications position='top-right' zIndex={1000} />
         <Router>
           <Navigation>
             <Routes>
@@ -29,6 +33,7 @@ function App(): React.JSX.Element {
               <Route path='/about' element={<AboutPage />} />
               <Route path='/contact' element={<ContactPage />} />
               <Route path='/login' element={<LoginPage />} />
+              <Route path='/admin/turtle-records' element={<AdminTurtleRecordsPage />} />
             </Routes>
           </Navigation>
         </Router>

@@ -36,34 +36,37 @@ export default function LoginPage(): React.JSX.Element {
 
           <Divider />
 
-          <Stack gap='md'>
-            <TextInput
-              label='Email'
-              placeholder='your@email.com'
-              leftSection={<IconMail size={16} />}
-              value={email}
-              onChange={(event) => setEmail(event.currentTarget.value)}
-              required
-            />
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              handleLogin();
+            }}
+          >
+            <Stack gap='md'>
+              <TextInput
+                label='Email'
+                placeholder='your@email.com'
+                leftSection={<IconMail size={16} />}
+                value={email}
+                onChange={(event) => setEmail(event.currentTarget.value)}
+                required
+                type='email'
+              />
 
-            <PasswordInput
-              label='Password'
-              placeholder='Your password'
-              leftSection={<IconLock size={16} />}
-              value={password}
-              onChange={(event) => setPassword(event.currentTarget.value)}
-              required
-            />
+              <PasswordInput
+                label='Password'
+                placeholder='Your password'
+                leftSection={<IconLock size={16} />}
+                value={password}
+                onChange={(event) => setPassword(event.currentTarget.value)}
+                required
+              />
 
-            <Button
-              fullWidth
-              size='md'
-              onClick={handleLogin}
-              disabled={!email || !password}
-            >
-              Sign In
-            </Button>
-          </Stack>
+              <Button fullWidth size='md' type='submit' disabled={!email || !password}>
+                Sign In
+              </Button>
+            </Stack>
+          </form>
 
           <Divider />
 
