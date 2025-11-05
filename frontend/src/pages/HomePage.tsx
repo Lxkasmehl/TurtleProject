@@ -121,20 +121,18 @@ export default function HomePage() {
     }, 200);
 
     try {
-      // Get location if available (for admin, always try to get location)
+      // Get location if available (for all users)
       let location = null;
-      if (role === 'admin') {
-        setIsGettingLocation(true);
-        try {
-          location = await getCurrentLocation();
-          if (!location) {
-            console.warn('Location not available or denied by user');
-          }
-        } catch (error) {
-          console.warn('Failed to get location:', error);
-        } finally {
-          setIsGettingLocation(false);
+      setIsGettingLocation(true);
+      try {
+        location = await getCurrentLocation();
+        if (!location) {
+          console.warn('Location not available or denied by user');
         }
+      } catch (error) {
+        console.warn('Failed to get location:', error);
+      } finally {
+        setIsGettingLocation(false);
       }
 
       // For admin, check for duplicates
@@ -337,7 +335,7 @@ export default function HomePage() {
                         <Center>
                           <Loader size='sm' />
                         </Center>
-                        {isGettingLocation && role === 'admin' && (
+                        {isGettingLocation && (
                           <Text size='xs' c='dimmed' ta='center'>
                             Please allow location access to track turtle sightings
                           </Text>
