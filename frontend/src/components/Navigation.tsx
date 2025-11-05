@@ -50,6 +50,20 @@ export default function Navigation({ children }: NavigationProps) {
     close();
   };
 
+  // Get navigation items in the correct order based on role
+  const getNavigationItems = () => {
+    const items = [...navigationItems];
+    if (role === 'admin') {
+      // Insert Turtle Records after Home
+      items.splice(1, 0, {
+        label: 'Turtle Records',
+        path: '/admin/turtle-records',
+        icon: IconPhoto,
+      });
+    }
+    return items;
+  };
+
   const NavButton = ({
     item,
     variant = 'subtle',
@@ -109,19 +123,9 @@ export default function Navigation({ children }: NavigationProps) {
           {/* Center - Desktop Navigation */}
           {!isMobile && (
             <Group gap='xs'>
-              {navigationItems.map((item) => (
+              {getNavigationItems().map((item) => (
                 <NavButton key={item.path} item={item} />
               ))}
-              {/* Admin Turtle Records Link - only visible for admins */}
-              {role === 'admin' && (
-                <NavButton
-                  item={{
-                    label: 'Turtle Records',
-                    path: '/admin/turtle-records',
-                    icon: IconPhoto,
-                  }}
-                />
-              )}
             </Group>
           )}
 
@@ -178,20 +182,9 @@ export default function Navigation({ children }: NavigationProps) {
         <Stack gap='xs' h='90vh' justify='space-between'>
           {/* Main navigation links at top */}
           <Stack gap='xs'>
-            {navigationItems.map((item) => (
+            {getNavigationItems().map((item) => (
               <NavButton key={item.path} item={item} variant='light' />
             ))}
-            {/* Admin Turtle Records Link - only visible for admins */}
-            {role === 'admin' && (
-              <NavButton
-                item={{
-                  label: 'Turtle Records',
-                  path: '/admin/turtle-records',
-                  icon: IconPhoto,
-                }}
-                variant='light'
-              />
-            )}
           </Stack>
 
           {/* Login link pushed to bottom */}
