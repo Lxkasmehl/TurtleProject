@@ -1,11 +1,5 @@
 import { test, expect } from '@playwright/test';
-
-const openMobileMenuIfPresent = async (page: any) => {
-  const burger = page.getByTestId('mobile-menu-button');
-  if (await burger.isVisible()) {
-    await burger.click();
-  }
-};
+import { openMobileMenuIfPresent } from './helpers';
 
 test.describe('Navigation Tests', () => {
   test('should navigate between all pages', async ({ page }) => {
