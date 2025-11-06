@@ -1,9 +1,16 @@
 import { test, expect } from '@playwright/test';
 import { Buffer } from 'buffer';
-import { openMobileMenuIfPresent, loginAsAdmin, navigateUsingNav } from '../helpers';
+import {
+  openMobileMenuIfPresent,
+  loginAsAdmin,
+  navigateUsingNav,
+  grantLocationPermission,
+} from '../helpers';
 
 test.describe('Admin Photo Upload with Duplicate Detection Tests', () => {
   test.beforeEach(async ({ page }) => {
+    // Grant location permission to avoid permission dialogs (especially in Firefox)
+    await grantLocationPermission(page);
     // Clear localStorage before each test
     await page.goto('/');
     await page.evaluate(() => {

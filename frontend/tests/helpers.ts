@@ -70,3 +70,13 @@ export const navigateTo = async (page: Page, path: string) => {
   // Wait for navigation to complete
   await page.waitForTimeout(200);
 };
+
+/**
+ * Helper function to grant location permission before uploading photos
+ * This prevents the browser from showing a location permission dialog
+ * which blocks tests, especially in Firefox
+ */
+export const grantLocationPermission = async (page: Page) => {
+  // Grant geolocation permission to avoid permission dialogs
+  await page.context().grantPermissions(['geolocation']);
+};

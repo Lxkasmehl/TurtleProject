@@ -1,8 +1,15 @@
 import { test, expect } from '@playwright/test';
-import { loginAsAdmin, loginAsCommunity, navigateTo } from '../helpers';
+import {
+  loginAsAdmin,
+  loginAsCommunity,
+  navigateTo,
+  grantLocationPermission,
+} from '../helpers';
 
 test.describe('Admin Turtle Match Page Tests', () => {
   test.beforeEach(async ({ page }) => {
+    // Grant location permission to avoid permission dialogs (especially in Firefox)
+    await grantLocationPermission(page);
     // Clear localStorage before each test
     await page.goto('/');
     await page.evaluate(() => {
