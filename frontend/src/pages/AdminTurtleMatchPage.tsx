@@ -4,8 +4,6 @@ import {
   Text,
   Stack,
   Grid,
-  Card,
-  Image,
   Group,
   Badge,
   Paper,
@@ -13,21 +11,13 @@ import {
   Loader,
   Button,
   Alert,
-  Divider,
 } from '@mantine/core';
-import {
-  IconPhoto,
-  IconClock,
-  IconFile,
-  IconMapPin,
-  IconCheck,
-  IconArrowLeft,
-  IconRecycle,
-} from '@tabler/icons-react';
+import { IconPhoto, IconCheck, IconArrowLeft, IconRecycle } from '@tabler/icons-react';
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { getDuplicatePhotosByImageId, type UploadedPhoto } from '../services/mockBackend';
 import { useUser } from '../hooks/useUser';
+import { PhotoCard } from '../components/PhotoCard';
 
 export default function AdminTurtleMatchPage() {
   const { role } = useUser();
@@ -65,25 +55,9 @@ export default function AdminTurtleMatchPage() {
     loadPhotos();
   }, [imageId, role, navigate]);
 
-  const formatFileSize = (bytes: number): string => {
-    if (bytes === 0) return '0 Bytes';
-    const k = 1024;
-    const sizes = ['Bytes', 'KB', 'MB'];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return Math.round((bytes / Math.pow(k, i)) * 100) / 100 + ' ' + sizes[i];
-  };
-
-  const formatLocation = (photo: UploadedPhoto): string => {
-    if (!photo.location) return 'Location not available';
-    if (photo.location.address) return photo.location.address;
-    return `${photo.location.latitude.toFixed(6)}, ${photo.location.longitude.toFixed(
-      6
-    )}`;
-  };
-
-  const getGoogleMapsUrl = (photo: UploadedPhoto): string | null => {
-    if (!photo.location) return null;
-    return `https://www.google.com/maps?q=${photo.location.latitude},${photo.location.longitude}`;
+  const handlePhotoClick = (photo: UploadedPhoto) => {
+    // Could open a modal here if needed
+    console.log('Photo clicked:', photo);
   };
 
   if (role !== 'admin') {
@@ -160,141 +134,18 @@ export default function AdminTurtleMatchPage() {
           <Grid gutter='md'>
             {photos.map((photo, index) => (
               <Grid.Col key={photo.imageId} span={{ base: 12, md: 6 }}>
-                <Card shadow='sm' padding='lg' radius='md' withBorder>
-                  <Stack gap='md'>
-                    {/* Photo */}
-                    <Card.Section>
-                      <Image
-                        src={photo.preview || undefined}
-                        alt={photo.fileName}
-                        height={300}
-                        fit='cover'
-                        radius='md'
-                      />
-                    </Card.Section>
-
-                    {/* Badges */}
-                    <Group gap='xs'>
-                      {index === 0 && (
-                        <Badge color='green' leftSection={<IconCheck size={12} />}>
-                          Most Recent
-                        </Badge>
-                      )}
-                      <Badge
-                        size='xs'
-                        variant='light'
-                        color='gray'
-                        leftSection={<IconFile size={10} />}
-                      >
-                        {formatFileSize(photo.fileSize)}
-                      </Badge>
-                      <Badge
-                        size='xs'
-                        variant='light'
-                        color='blue'
-                        leftSection={<IconClock size={10} />}
-                      >
-                        {photo.uploadDate}
-                      </Badge>
-                    </Group>
-
-                    <Divider />
-
-                    {/* File Info */}
-                    <Stack gap='xs'>
-                      <Group justify='space-between'>
-                        <Text size='sm' fw={500}>
-                          File Name:
-                        </Text>
-                        <Text size='sm' c='dimmed' ta='right'>
-                          {photo.fileName}
-                        </Text>
-                      </Group>
-                      <Group justify='space-between'>
-                        <Text size='sm' fw={500}>
-                          Upload Date:
-                        </Text>
-                        <Text size='sm' c='dimmed' ta='right'>
-                          {photo.uploadDate}
-                        </Text>
-                      </Group>
-                      <Group justify='space-between'>
-                        <Text size='sm' fw={500}>
-                          Timestamp:
-                        </Text>
-                        <Text
-                          size='sm'
-                          c='dimmed'
-                          ta='right'
-                          style={{ fontFamily: 'monospace' }}
-                        >
-                          {new Date(photo.timestamp).toLocaleString()}
-                        </Text>
-                      </Group>
-                      <Group justify='space-between'>
-                        <Text size='sm' fw={500}>
-                          Image ID:
-                        </Text>
-                        <Text
-                          size='sm'
-                          c='dimmed'
-                          ta='right'
-                          style={{ fontFamily: 'monospace' }}
-                        >
-                          {photo.imageId}
-                        </Text>
-                      </Group>
-                    </Stack>
-
-                    {/* Location Info */}
-                    {photo.location && (
-                      <>
-                        <Divider />
-                        <Stack gap='xs'>
-                          <Group gap='xs'>
-                            <IconMapPin size={16} />
-                            <Text size='sm' fw={500}>
-                              Location:
-                            </Text>
-                          </Group>
-                          <Text size='sm' c='dimmed' pl='md'>
-                            {formatLocation(photo)}
-                          </Text>
-                          {photo.location.accuracy && (
-                            <Text size='xs' c='dimmed' pl='md'>
-                              Accuracy: ±{Math.round(photo.location.accuracy)} meters
-                            </Text>
-                          )}
-                          {getGoogleMapsUrl(photo) && (
-                            <Button
-                              component='a'
-                              href={getGoogleMapsUrl(photo) || undefined}
-                              target='_blank'
-                              rel='noopener noreferrer'
-                              variant='light'
-                              size='xs'
-                              leftSection={<IconMapPin size={14} />}
-                              fullWidth
-                            >
-                              View on Google Maps
-                            </Button>
-                          )}
-                        </Stack>
-                      </>
-                    )}
-
-                    {!photo.location && (
-                      <>
-                        <Divider />
-                        <Alert color='gray' radius='md'>
-                          <Text size='xs' c='dimmed'>
-                            Location information not available for this sighting
-                          </Text>
-                        </Alert>
-                      </>
-                    )}
-                  </Stack>
-                </Card>
+                <Stack gap='xs'>
+                  {index === 0 && (
+                    <Badge color='green' leftSection={<IconCheck size={12} />} size='lg'>
+                      Most Recent
+                    </Badge>
+                  )}
+                  <PhotoCard
+                    photo={photo}
+                    onPhotoClick={handlePhotoClick}
+                    showViewAllButton={false}
+                  />
+                </Stack>
               </Grid.Col>
             ))}
           </Grid>
