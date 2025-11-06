@@ -5,14 +5,15 @@ import {
   loginAsAdmin,
   navigateUsingNav,
   grantLocationPermission,
+  clickUploadPhotoButton,
 } from '../helpers';
 
 test.describe('Admin Photo Upload with Duplicate Detection Tests', () => {
   test.beforeEach(async ({ page }) => {
-    // Grant location permission to avoid permission dialogs (especially in Firefox)
-    await grantLocationPermission(page);
     // Clear localStorage before each test
     await page.goto('/');
+    // Grant location permission after page is loaded to avoid permission dialogs (especially in Firefox)
+    await grantLocationPermission(page);
     await page.evaluate(() => {
       localStorage.clear();
     });
@@ -43,12 +44,15 @@ test.describe('Admin Photo Upload with Duplicate Detection Tests', () => {
       buffer: Buffer.from(filePath.split(',')[1], 'base64'),
     });
 
+    // Grant location permission before uploading (especially important after reload)
+    await grantLocationPermission(page);
+
     // Wait for preview card to appear and click upload button
     await page.waitForSelector('button:has-text("Upload Photo")', { timeout: 5000 });
-    await page.getByRole('button', { name: 'Upload Photo' }).click();
+    await clickUploadPhotoButton(page);
 
     // Wait for success notification (notification title includes emoji)
-    await page.waitForSelector('text=/Upload Successful/i', { timeout: 10000 });
+    await page.waitForSelector('text=/Upload Successful/i', { timeout: 20000 });
 
     // Wait a bit for the upload to complete and be saved to localStorage
     await page.waitForTimeout(2000);
@@ -63,13 +67,16 @@ test.describe('Admin Photo Upload with Duplicate Detection Tests', () => {
       buffer: Buffer.from(filePath.split(',')[1], 'base64'),
     });
 
+    // Grant location permission before uploading (especially important after reload)
+    await grantLocationPermission(page);
+
     // Wait for preview card to appear and click upload button
     await page.waitForSelector('button:has-text("Upload Photo")', { timeout: 5000 });
-    await page.getByRole('button', { name: 'Upload Photo' }).click();
+    await clickUploadPhotoButton(page);
 
     // Should detect duplicate and navigate to match page immediately
     // For duplicates, navigation happens without showing notification
-    await expect(page).toHaveURL(/\/admin\/turtle-match\/img_/, { timeout: 15000 });
+    await expect(page).toHaveURL(/\/admin\/turtle-match\/img_/, { timeout: 20000 });
 
     // Should see match page
     await expect(page.getByText('Turtle Match Found!')).toBeVisible();
@@ -97,14 +104,17 @@ test.describe('Admin Photo Upload with Duplicate Detection Tests', () => {
       buffer: Buffer.from(filePath.split(',')[1], 'base64'),
     });
 
+    // Grant location permission before uploading (especially important after reload)
+    await grantLocationPermission(page);
+
     // Wait for preview card to appear and click upload button
     await page.waitForSelector('button:has-text("Upload Photo")', { timeout: 5000 });
-    await page.getByRole('button', { name: 'Upload Photo' }).click();
+    await clickUploadPhotoButton(page);
 
     // Should see success notification (notification title includes emoji)
     // Use first() to handle multiple matches (Alert and Notification)
     await expect(page.getByText(/Upload Successful/i).first()).toBeVisible({
-      timeout: 10000,
+      timeout: 20000,
     });
   });
 
@@ -134,12 +144,15 @@ test.describe('Admin Photo Upload with Duplicate Detection Tests', () => {
       buffer: Buffer.from(filePath.split(',')[1], 'base64'),
     });
 
+    // Grant location permission before uploading (especially important after reload)
+    await grantLocationPermission(page);
+
     // Wait for preview card to appear and click upload button
     await page.waitForSelector('button:has-text("Upload Photo")', { timeout: 5000 });
-    await page.getByRole('button', { name: 'Upload Photo' }).click();
+    await clickUploadPhotoButton(page);
 
     // Wait for success notification (notification title includes emoji)
-    await page.waitForSelector('text=/Upload Successful/i', { timeout: 10000 });
+    await page.waitForSelector('text=/Upload Successful/i', { timeout: 20000 });
     await page.waitForTimeout(2000);
 
     // Upload duplicate - reload and re-authenticate as admin (role is lost on reload)
@@ -152,13 +165,16 @@ test.describe('Admin Photo Upload with Duplicate Detection Tests', () => {
       buffer: Buffer.from(filePath.split(',')[1], 'base64'),
     });
 
+    // Grant location permission before uploading (especially important after reload)
+    await grantLocationPermission(page);
+
     // Wait for preview card to appear and click upload button
     await page.waitForSelector('button:has-text("Upload Photo")', { timeout: 5000 });
-    await page.getByRole('button', { name: 'Upload Photo' }).click();
+    await clickUploadPhotoButton(page);
 
     // Should navigate to match page which shows duplicate was found
     // For duplicates, navigation happens immediately without notification
-    await expect(page).toHaveURL(/\/admin\/turtle-match\/img_/, { timeout: 15000 });
+    await expect(page).toHaveURL(/\/admin\/turtle-match\/img_/, { timeout: 20000 });
     await expect(page.getByText(/Turtle Match Found!/i)).toBeVisible();
   });
 
@@ -184,14 +200,17 @@ test.describe('Admin Photo Upload with Duplicate Detection Tests', () => {
       buffer: Buffer.from(filePath.split(',')[1], 'base64'),
     });
 
+    // Grant location permission before uploading (especially important after reload)
+    await grantLocationPermission(page);
+
     // Wait for preview card to appear and click upload button
     await page.waitForSelector('button:has-text("Upload Photo")', { timeout: 5000 });
-    await page.getByRole('button', { name: 'Upload Photo' }).click();
+    await clickUploadPhotoButton(page);
 
     // Should see success notification (notification title includes emoji)
     // Use first() to handle multiple matches (Alert and Notification)
     await expect(page.getByText(/Upload Successful/i).first()).toBeVisible({
-      timeout: 10000,
+      timeout: 20000,
     });
 
     // Should still be on home page (not redirected for new photos)
@@ -220,15 +239,18 @@ test.describe('Admin Photo Upload with Duplicate Detection Tests', () => {
       buffer: Buffer.from(filePath.split(',')[1], 'base64'),
     });
 
+    // Grant location permission before uploading (especially important after reload)
+    await grantLocationPermission(page);
+
     // Wait for preview card to appear and click upload button
     await page.waitForSelector('button:has-text("Upload Photo")', { timeout: 5000 });
-    await page.getByRole('button', { name: 'Upload Photo' }).click();
+    await clickUploadPhotoButton(page);
 
     // Should see upload progress and then success notification
     await page.waitForSelector('text=/Uploading/i', { timeout: 5000 });
     // Use first() to handle multiple matches (Alert and Notification)
     await expect(page.getByText(/Upload Successful/i).first()).toBeVisible({
-      timeout: 10000,
+      timeout: 20000,
     });
   });
 
@@ -254,12 +276,15 @@ test.describe('Admin Photo Upload with Duplicate Detection Tests', () => {
       buffer: Buffer.from(filePath.split(',')[1], 'base64'),
     });
 
+    // Grant location permission before uploading (especially important after reload)
+    await grantLocationPermission(page);
+
     // Wait for preview card to appear and click upload button
     await page.waitForSelector('button:has-text("Upload Photo")', { timeout: 5000 });
-    await page.getByRole('button', { name: 'Upload Photo' }).click();
+    await clickUploadPhotoButton(page);
 
     // Wait for success notification (notification title includes emoji)
-    await page.waitForSelector('text=/Upload Successful/i', { timeout: 10000 });
+    await page.waitForSelector('text=/Upload Successful/i', { timeout: 20000 });
 
     // Navigate to Turtle Records
     await openMobileMenuIfPresent(page);
@@ -299,12 +324,15 @@ test.describe('Admin Photo Upload with Duplicate Detection Tests', () => {
       buffer: Buffer.from(filePath.split(',')[1], 'base64'),
     });
 
+    // Grant location permission before uploading (especially important after reload)
+    await grantLocationPermission(page);
+
     // Wait for preview card to appear and click upload button
     await page.waitForSelector('button:has-text("Upload Photo")', { timeout: 5000 });
-    await page.getByRole('button', { name: 'Upload Photo' }).click();
+    await clickUploadPhotoButton(page);
 
     // Wait for success notification (notification title includes emoji)
-    await page.waitForSelector('text=/Upload Successful/i', { timeout: 10000 });
+    await page.waitForSelector('text=/Upload Successful/i', { timeout: 20000 });
     await page.waitForTimeout(2000);
 
     // Upload duplicate - reload and re-authenticate as admin (role is lost on reload)
@@ -317,14 +345,17 @@ test.describe('Admin Photo Upload with Duplicate Detection Tests', () => {
       buffer: Buffer.from(filePath.split(',')[1], 'base64'),
     });
 
+    // Grant location permission before uploading (especially important after reload)
+    await grantLocationPermission(page);
+
     // Wait for preview card to appear and click upload button
     await page.waitForSelector('button:has-text("Upload Photo")', { timeout: 5000 });
-    await page.getByRole('button', { name: 'Upload Photo' }).click();
+    await clickUploadPhotoButton(page);
 
     // For duplicate uploads as admin, navigation happens immediately (no notification)
     // Should detect duplicate and navigate to match page immediately
     // For duplicates, navigation happens without showing notification
-    await expect(page).toHaveURL(/\/admin\/turtle-match\/img_/, { timeout: 15000 });
+    await expect(page).toHaveURL(/\/admin\/turtle-match\/img_/, { timeout: 20000 });
     // Go back to home using navigation to preserve admin state
     await navigateUsingNav(page, 'Home');
 

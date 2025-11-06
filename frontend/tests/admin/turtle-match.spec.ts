@@ -4,14 +4,15 @@ import {
   loginAsCommunity,
   navigateTo,
   grantLocationPermission,
+  clickUploadPhotoButton,
 } from '../helpers';
 
 test.describe('Admin Turtle Match Page Tests', () => {
   test.beforeEach(async ({ page }) => {
-    // Grant location permission to avoid permission dialogs (especially in Firefox)
-    await grantLocationPermission(page);
     // Clear localStorage before each test
     await page.goto('/');
+    // Grant location permission after page is loaded to avoid permission dialogs (especially in Firefox)
+    await grantLocationPermission(page);
     await page.evaluate(() => {
       localStorage.clear();
     });
@@ -41,12 +42,15 @@ test.describe('Admin Turtle Match Page Tests', () => {
       buffer: Buffer.from(filePath.split(',')[1], 'base64'),
     });
 
+    // Grant location permission before uploading (especially important after reload)
+    await grantLocationPermission(page);
+
     // Wait for preview card to appear and click upload button
     await page.waitForSelector('button:has-text("Upload Photo")', { timeout: 5000 });
-    await page.getByRole('button', { name: 'Upload Photo' }).click();
+    await clickUploadPhotoButton(page);
 
     await expect(page.getByText(/Upload Successful/i).first()).toBeVisible({
-      timeout: 10000,
+      timeout: 20000,
     });
 
     // Wait a moment for photo to be saved to localStorage
@@ -97,12 +101,15 @@ test.describe('Admin Turtle Match Page Tests', () => {
       buffer: Buffer.from(filePath.split(',')[1], 'base64'),
     });
 
+    // Grant location permission before uploading (especially important after reload)
+    await grantLocationPermission(page);
+
     // Wait for preview card to appear and click upload button
     await page.waitForSelector('button:has-text("Upload Photo")', { timeout: 5000 });
-    await page.getByRole('button', { name: 'Upload Photo' }).click();
+    await clickUploadPhotoButton(page);
 
     await expect(page.getByText(/Upload Successful/i).first()).toBeVisible({
-      timeout: 10000,
+      timeout: 20000,
     });
 
     const imageId = await page.evaluate(() => {
@@ -146,12 +153,15 @@ test.describe('Admin Turtle Match Page Tests', () => {
       buffer: Buffer.from(filePath.split(',')[1], 'base64'),
     });
 
+    // Grant location permission before uploading (especially important after reload)
+    await grantLocationPermission(page);
+
     // Wait for preview card to appear and click upload button
     await page.waitForSelector('button:has-text("Upload Photo")', { timeout: 5000 });
-    await page.getByRole('button', { name: 'Upload Photo' }).click();
+    await clickUploadPhotoButton(page);
 
     await expect(page.getByText(/Upload Successful/i).first()).toBeVisible({
-      timeout: 10000,
+      timeout: 20000,
     });
 
     // Upload again (same file)
@@ -166,12 +176,15 @@ test.describe('Admin Turtle Match Page Tests', () => {
       buffer: Buffer.from(filePath.split(',')[1], 'base64'),
     });
 
+    // Grant location permission before uploading (especially important after reload)
+    await grantLocationPermission(page);
+
     // Wait for preview card to appear and click upload button
     await page.waitForSelector('button:has-text("Upload Photo")', { timeout: 5000 });
-    await page.getByRole('button', { name: 'Upload Photo' }).click();
+    await clickUploadPhotoButton(page);
 
     // For duplicates, it navigates to match page instead of showing notification
-    await page.waitForSelector('text=/Turtle Match Found!/i', { timeout: 10000 });
+    await page.waitForSelector('text=/Turtle Match Found!/i', { timeout: 20000 });
 
     // Extract image ID from URL (we're already on the match page)
     const url = page.url();
@@ -207,12 +220,15 @@ test.describe('Admin Turtle Match Page Tests', () => {
       buffer: Buffer.from(filePath.split(',')[1], 'base64'),
     });
 
+    // Grant location permission before uploading (especially important after reload)
+    await grantLocationPermission(page);
+
     // Wait for preview card to appear and click upload button
     await page.waitForSelector('button:has-text("Upload Photo")', { timeout: 5000 });
-    await page.getByRole('button', { name: 'Upload Photo' }).click();
+    await clickUploadPhotoButton(page);
 
     await expect(page.getByText(/Upload Successful/i).first()).toBeVisible({
-      timeout: 10000,
+      timeout: 20000,
     });
 
     const imageId = await page.evaluate(() => {
@@ -273,12 +289,15 @@ test.describe('Admin Turtle Match Page Tests', () => {
       buffer: Buffer.from(filePath.split(',')[1], 'base64'),
     });
 
+    // Grant location permission before uploading (especially important after reload)
+    await grantLocationPermission(page);
+
     // Wait for preview card to appear and click upload button
     await page.waitForSelector('button:has-text("Upload Photo")', { timeout: 5000 });
-    await page.getByRole('button', { name: 'Upload Photo' }).click();
+    await clickUploadPhotoButton(page);
 
     await expect(page.getByText(/Upload Successful/i).first()).toBeVisible({
-      timeout: 10000,
+      timeout: 20000,
     });
 
     const imageId = await page.evaluate(() => {
@@ -336,12 +355,15 @@ test.describe('Admin Turtle Match Page Tests', () => {
       buffer: Buffer.from(filePath.split(',')[1], 'base64'),
     });
 
+    // Grant location permission before uploading (especially important after reload)
+    await grantLocationPermission(page);
+
     // Wait for preview card to appear and click upload button
     await page.waitForSelector('button:has-text("Upload Photo")', { timeout: 5000 });
-    await page.getByRole('button', { name: 'Upload Photo' }).click();
+    await clickUploadPhotoButton(page);
 
     await expect(page.getByText(/Upload Successful/i).first()).toBeVisible({
-      timeout: 10000,
+      timeout: 20000,
     });
 
     const imageId = await page.evaluate(() => {

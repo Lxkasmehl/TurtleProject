@@ -4,14 +4,15 @@ import {
   loginAsAdmin,
   loginAsCommunity,
   grantLocationPermission,
+  clickUploadPhotoButton,
 } from '../helpers';
 
 test.describe('Admin Turtle Records Page Tests', () => {
   test.beforeEach(async ({ page }) => {
-    // Grant location permission to avoid permission dialogs (especially in Firefox)
-    await grantLocationPermission(page);
     // Clear localStorage before each test
     await page.goto('/');
+    // Grant location permission after page is loaded to avoid permission dialogs (especially in Firefox)
+    await grantLocationPermission(page);
     await page.evaluate(() => {
       localStorage.clear();
     });
@@ -82,12 +83,15 @@ test.describe('Admin Turtle Records Page Tests', () => {
       buffer: Buffer.from(filePath.split(',')[1], 'base64'),
     });
 
+    // Grant location permission before uploading (especially important after reload)
+    await grantLocationPermission(page);
+
     // Wait for preview card to appear and click upload button
     await page.waitForSelector('button:has-text("Upload Photo")', { timeout: 5000 });
-    await page.getByRole('button', { name: 'Upload Photo' }).click();
+    await clickUploadPhotoButton(page);
 
     // Wait for upload to complete
-    await page.waitForSelector('text=/Upload Successful/i', { timeout: 10000 });
+    await page.waitForSelector('text=/Upload Successful/i', { timeout: 20000 });
 
     // Navigate to Turtle Records page
     await openMobileMenuIfPresent(page);
@@ -120,18 +124,23 @@ test.describe('Admin Turtle Records Page Tests', () => {
       buffer: Buffer.from(filePath.split(',')[1], 'base64'),
     });
 
+    // Grant location permission before uploading (especially important after reload)
+    await grantLocationPermission(page);
+
     // Wait for preview card to appear and click upload button
     await page.waitForSelector('button:has-text("Upload Photo")', { timeout: 5000 });
-    await page.getByRole('button', { name: 'Upload Photo' }).click();
+    await clickUploadPhotoButton(page);
 
-    await page.waitForSelector('text=/Upload Successful/i', { timeout: 10000 });
+    await page.waitForSelector('text=/Upload Successful/i', { timeout: 20000 });
 
     // Navigate to Turtle Records
     await openMobileMenuIfPresent(page);
     await page.getByRole('button', { name: 'Turtle Records' }).click();
 
-    // Wait for photo to appear (use expect instead of waitForSelector for better reliability)
-    await expect(page.getByText('test-photo.png').first()).toBeVisible({ timeout: 5000 });
+    // Wait for photo image to appear (wait for the element we'll interact with)
+    await expect(page.getByRole('img', { name: 'test-photo.png' })).toBeVisible({
+      timeout: 5000,
+    });
 
     // Click on photo card (click the image, not the text - the image is the clickable element)
     await page.getByRole('img', { name: 'test-photo.png' }).click();

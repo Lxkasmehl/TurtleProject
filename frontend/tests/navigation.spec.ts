@@ -6,7 +6,7 @@ test.describe('Navigation Tests', () => {
     await page.goto('/');
 
     // Test Home page
-    await expect(page.locator('h1')).toContainText('Image Upload');
+    await expect(page.locator('h1')).toContainText(/^(Image|Photo) Upload$/);
 
     // Navigate to About
     await openMobileMenuIfPresent(page);
