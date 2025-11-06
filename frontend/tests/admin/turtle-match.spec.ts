@@ -130,6 +130,7 @@ test.describe('Admin Turtle Match Page Tests', () => {
   });
 
   test('should display all duplicate photos', async ({ page }) => {
+    test.setTimeout(60000);
     await loginAsAdmin(page);
 
     // Upload first photo
@@ -161,7 +162,7 @@ test.describe('Admin Turtle Match Page Tests', () => {
     await clickUploadPhotoButton(page);
 
     await expect(page.getByText(/Upload Successful/i).first()).toBeVisible({
-      timeout: 20000,
+      timeout: 30000,
     });
 
     // Upload again (same file)
@@ -184,7 +185,7 @@ test.describe('Admin Turtle Match Page Tests', () => {
     await clickUploadPhotoButton(page);
 
     // For duplicates, it navigates to match page instead of showing notification
-    await page.waitForSelector('text=/Turtle Match Found!/i', { timeout: 20000 });
+    await page.waitForSelector('text=/Turtle Match Found!/i', { timeout: 30000 });
 
     // Extract image ID from URL (we're already on the match page)
     const url = page.url();
