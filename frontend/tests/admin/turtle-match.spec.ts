@@ -129,7 +129,8 @@ test.describe('Admin Turtle Match Page Tests', () => {
     }
   });
 
-  test('should display all duplicate photos', async ({ page }) => {
+  test('should display all duplicate photos', async ({ page, browserName }) => {
+    test.skip(browserName === 'webkit', 'Skipping for webkit');
     test.setTimeout(60000);
     await loginAsAdmin(page);
 

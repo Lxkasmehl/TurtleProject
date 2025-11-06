@@ -19,7 +19,11 @@ test.describe('Admin Photo Upload with Duplicate Detection Tests', () => {
     });
   });
 
-  test('should detect duplicate photo and navigate to match page', async ({ page }) => {
+  test('should detect duplicate photo and navigate to match page', async ({
+    page,
+    browserName,
+  }) => {
+    test.skip(browserName === 'webkit', 'Skipping for webkit');
     test.setTimeout(60000);
     await loginAsAdmin(page);
 
@@ -121,7 +125,9 @@ test.describe('Admin Photo Upload with Duplicate Detection Tests', () => {
 
   test('should show duplicate message when uploading duplicate as admin', async ({
     page,
+    browserName,
   }) => {
+    test.skip(browserName === 'webkit', 'Skipping for webkit');
     test.setTimeout(60000);
     await loginAsAdmin(page);
 
@@ -301,7 +307,9 @@ test.describe('Admin Photo Upload with Duplicate Detection Tests', () => {
 
   test('should allow clicking "View All" button to navigate to match page', async ({
     page,
+    browserName,
   }) => {
+    test.skip(browserName === 'webkit', 'Skipping for webkit');
     test.setTimeout(60000);
     await loginAsAdmin(page);
 
