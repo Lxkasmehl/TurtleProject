@@ -1,60 +1,91 @@
-import {
-  Container,
-  Paper,
-  Title,
-  Text,
-  Group,
-  Image,
-  Button,
-  Stack,
-  Center,
-} from '@mantine/core';
+import { Container, Paper, Title, Text, Group, Stack, Center } from '@mantine/core';
 import { Dropzone } from '@mantine/dropzone';
-import type { FileWithPath, FileRejection } from '@mantine/dropzone';
-import { IconUpload, IconX, IconPhoto } from '@tabler/icons-react';
-import { useState } from 'react';
+import type { FileRejection, FileWithPath } from '@mantine/dropzone';
+import { notifications } from '@mantine/notifications';
+import { IconUpload, IconX, IconPhoto, IconAlertCircle } from '@tabler/icons-react';
+import { validateFile } from '../services/mockBackend';
+import { useUser } from '../hooks/useUser';
+import { usePhotoUpload } from '../hooks/usePhotoUpload';
+import { PreviewCard } from '../components/PreviewCard';
 
 export default function HomePage() {
-  const [files, setFiles] = useState<FileWithPath[]>([]);
-  const [preview, setPreview] = useState<string | null>(null);
+  const { role } = useUser();
 
-  const handleDrop = (acceptedFiles: FileWithPath[]): void => {
-    setFiles(acceptedFiles);
+  const {
+    files,
+    preview,
+    uploadState,
+    uploadProgress,
+    uploadResponse,
+    imageId,
+    isDuplicate,
+    previousUploadDate,
+    isGettingLocation,
+    handleDrop,
+    handleUpload,
+    handleRemove,
+  } = usePhotoUpload({ role });
+
+  const handleDropWithValidation = (acceptedFiles: FileWithPath[]): void => {
     if (acceptedFiles.length > 0) {
       const file = acceptedFiles[0];
-      const reader = new FileReader();
-      reader.onload = (e: ProgressEvent<FileReader>) => {
-        setPreview(e.target?.result as string);
-      };
-      reader.readAsDataURL(file);
+
+      // Validation
+      const validation = validateFile(file);
+      if (!validation.isValid) {
+        notifications.show({
+          title: 'Invalid File',
+          message: validation.error || 'File could not be validated',
+          color: 'red',
+          icon: <IconAlertCircle size={18} />,
+        });
+        return;
+      }
+
+      handleDrop(acceptedFiles);
     }
   };
 
-  const handleRemove = (): void => {
-    setFiles([]);
-    setPreview(null);
+  const handleReject = (rejectedFiles: FileRejection[]): void => {
+    const rejection = rejectedFiles[0];
+    let message = 'File could not be accepted';
+
+    if (rejection.errors[0]?.code === 'file-too-large') {
+      message = 'File is too large. Maximum: 5MB';
+    } else if (rejection.errors[0]?.code === 'file-invalid-type') {
+      message = 'Invalid file type. Allowed: PNG, JPG, JPEG, GIF, WEBP';
+    }
+
+    notifications.show({
+      title: 'Upload Rejected',
+      message,
+      color: 'orange',
+      icon: <IconAlertCircle size={18} />,
+    });
   };
 
   return (
     <Container size='sm' py='xl'>
-      <Paper shadow='sm' p='xl' radius='md'>
+      <Paper shadow='sm' p='xl' radius='md' withBorder>
         <Stack gap='lg'>
           <Center>
-            <Title order={1}>Image Upload</Title>
+            <Stack gap='xs' align='center'>
+              <Title order={1}>Photo Upload</Title>
+              <Text size='sm' c='dimmed' ta='center'>
+                Upload a photo to save it in the backend
+              </Text>
+            </Stack>
           </Center>
 
-          <Text size='sm' c='dimmed' ta='center'>
-            Upload an image to display it
-          </Text>
-
           <Dropzone
-            onDrop={handleDrop}
-            onReject={(files: FileRejection[]) => console.log('rejected files', files)}
+            onDrop={handleDropWithValidation}
+            onReject={handleReject}
             maxSize={5 * 1024 * 1024} // 5MB
             accept={{
               'image/*': ['.png', '.jpg', '.jpeg', '.gif', '.webp'],
             }}
             multiple={false}
+            disabled={uploadState === 'uploading'}
           >
             <Group justify='center' gap='xl' mih={220} style={{ pointerEvents: 'none' }}>
               <Dropzone.Accept>
@@ -68,42 +99,37 @@ export default function HomePage() {
               </Dropzone.Idle>
 
               <div>
-                <Text size='xl' inline>
-                  Drag an image here or click to select
+                <Text size='xl' inline ta='center'>
+                  Drop photo here or click to select
                 </Text>
-                <Text size='sm' c='dimmed' inline mt={7}>
+                <Text
+                  size='sm'
+                  c='dimmed'
+                  inline
+                  mt={7}
+                  ta='center'
+                  style={{ display: 'block' }}
+                >
                   Supported formats: PNG, JPG, JPEG, GIF, WEBP (max. 5MB)
                 </Text>
               </div>
             </Group>
           </Dropzone>
 
-          {preview && (
-            <Stack gap='md'>
-              <Title order={3}>Preview:</Title>
-              <Image
-                src={preview}
-                alt='Uploaded image'
-                radius='md'
-                style={{ maxWidth: '100%', height: 'auto' }}
-              />
-              <Button
-                color='green'
-                variant='light'
-                onClick={handleRemove}
-                leftSection={<IconX size={16} />}
-              >
-                Remove image
-              </Button>
-            </Stack>
-          )}
-
-          {files.length > 0 && (
-            <Text size='sm' c='dimmed'>
-              Selected file: {files[0].name} ({(files[0].size / 1024 / 1024).toFixed(2)}{' '}
-              MB)
-            </Text>
-          )}
+          <PreviewCard
+            preview={preview}
+            files={files}
+            uploadState={uploadState}
+            uploadProgress={uploadProgress}
+            uploadResponse={uploadResponse}
+            imageId={imageId}
+            isDuplicate={isDuplicate}
+            previousUploadDate={previousUploadDate}
+            isGettingLocation={isGettingLocation}
+            role={role}
+            onUpload={handleUpload}
+            onRemove={handleRemove}
+          />
         </Stack>
       </Paper>
     </Container>

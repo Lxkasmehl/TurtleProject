@@ -1,18 +1,12 @@
 import { test, expect } from '@playwright/test';
-
-const openMobileMenuIfPresent = async (page: any) => {
-  const burger = page.getByTestId('mobile-menu-button');
-  if (await burger.isVisible()) {
-    await burger.click();
-  }
-};
+import { openMobileMenuIfPresent } from './helpers';
 
 test.describe('Navigation Tests', () => {
   test('should navigate between all pages', async ({ page }) => {
     await page.goto('/');
 
     // Test Home page
-    await expect(page.locator('h1')).toContainText('Image Upload');
+    await expect(page.locator('h1')).toContainText(/^(Image|Photo) Upload$/);
 
     // Navigate to About
     await openMobileMenuIfPresent(page);

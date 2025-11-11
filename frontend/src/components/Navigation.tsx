@@ -22,6 +22,7 @@ import {
   IconLogin,
   IconUser,
   IconShield,
+  IconPhoto,
 } from '@tabler/icons-react';
 import { useUser } from '../hooks/useUser';
 
@@ -47,6 +48,20 @@ export default function Navigation({ children }: NavigationProps) {
   const handleNavigation = (path: string) => {
     navigate(path);
     close();
+  };
+
+  // Get navigation items in the correct order based on role
+  const getNavigationItems = () => {
+    const items = [...navigationItems];
+    if (role === 'admin') {
+      // Insert Turtle Records after Home
+      items.splice(1, 0, {
+        label: 'Turtle Records',
+        path: '/admin/turtle-records',
+        icon: IconPhoto,
+      });
+    }
+    return items;
   };
 
   const NavButton = ({
@@ -108,7 +123,7 @@ export default function Navigation({ children }: NavigationProps) {
           {/* Center - Desktop Navigation */}
           {!isMobile && (
             <Group gap='xs'>
-              {navigationItems.map((item) => (
+              {getNavigationItems().map((item) => (
                 <NavButton key={item.path} item={item} />
               ))}
             </Group>
@@ -167,7 +182,7 @@ export default function Navigation({ children }: NavigationProps) {
         <Stack gap='xs' h='90vh' justify='space-between'>
           {/* Main navigation links at top */}
           <Stack gap='xs'>
-            {navigationItems.map((item) => (
+            {getNavigationItems().map((item) => (
               <NavButton key={item.path} item={item} variant='light' />
             ))}
           </Stack>

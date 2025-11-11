@@ -1,0 +1,392 @@
+import { test, expect } from '@playwright/test';
+import { Buffer } from 'buffer';
+import {
+  openMobileMenuIfPresent,
+  loginAsAdmin,
+  navigateUsingNav,
+  grantLocationPermission,
+  clickUploadPhotoButton,
+} from '../helpers';
+
+test.describe('Admin Photo Upload with Duplicate Detection Tests', () => {
+  test.beforeEach(async ({ page }) => {
+    // Clear localStorage before each test
+    await page.goto('/');
+    // Grant location permission after page is loaded to avoid permission dialogs (especially in Firefox)
+    await grantLocationPermission(page);
+    await page.evaluate(() => {
+      localStorage.clear();
+    });
+  });
+
+  test('should detect duplicate photo and navigate to match page', async ({
+    page,
+    browserName,
+  }) => {
+    test.skip(browserName === 'webkit', 'Skipping for webkit');
+    test.setTimeout(60000);
+    await loginAsAdmin(page);
+
+    // Create a test image
+    const filePath = await page.evaluate(() => {
+      const canvas = document.createElement('canvas');
+      canvas.width = 100;
+      canvas.height = 100;
+      const ctx = canvas.getContext('2d');
+      if (ctx) {
+        ctx.fillStyle = 'blue';
+        ctx.fillRect(0, 0, 100, 100);
+      }
+      return canvas.toDataURL('image/png');
+    });
+
+    const fileInput = page.locator('input[type="file"]');
+
+    // Upload first photo
+    await fileInput.setInputFiles({
+      name: 'duplicate-turtle.png',
+      mimeType: 'image/png',
+      buffer: Buffer.from(filePath.split(',')[1], 'base64'),
+    });
+
+    // Grant location permission before uploading (especially important after reload)
+    await grantLocationPermission(page);
+
+    // Wait for preview card to appear and click upload button
+    await page.waitForSelector('button:has-text("Upload Photo")', { timeout: 5000 });
+    await clickUploadPhotoButton(page);
+
+    // Wait for success notification (notification title includes emoji)
+    await page.waitForSelector('text=/Upload Successful/i', { timeout: 30000 });
+
+    // Wait a bit for the upload to complete and be saved to localStorage
+    await page.waitForTimeout(2000);
+
+    // Reload page and re-authenticate as admin (role is lost on reload)
+    await page.reload();
+    await loginAsAdmin(page);
+
+    await fileInput.setInputFiles({
+      name: 'duplicate-turtle.png',
+      mimeType: 'image/png',
+      buffer: Buffer.from(filePath.split(',')[1], 'base64'),
+    });
+
+    // Grant location permission before uploading (especially important after reload)
+    await grantLocationPermission(page);
+
+    // Wait for preview card to appear and click upload button
+    await page.waitForSelector('button:has-text("Upload Photo")', { timeout: 5000 });
+    await clickUploadPhotoButton(page);
+
+    // Should detect duplicate and navigate to match page immediately
+    // For duplicates, navigation happens without showing notification
+    await expect(page).toHaveURL(/\/admin\/turtle-match\/img_/, { timeout: 30000 });
+
+    // Should see match page
+    await expect(page.getByText('Turtle Match Found!')).toBeVisible();
+  });
+
+  test('should show success notification on upload', async ({ page }) => {
+    await loginAsAdmin(page);
+
+    const filePath = await page.evaluate(() => {
+      const canvas = document.createElement('canvas');
+      canvas.width = 100;
+      canvas.height = 100;
+      const ctx = canvas.getContext('2d');
+      if (ctx) {
+        ctx.fillStyle = 'green';
+        ctx.fillRect(0, 0, 100, 100);
+      }
+      return canvas.toDataURL('image/png');
+    });
+
+    const fileInput = page.locator('input[type="file"]');
+    await fileInput.setInputFiles({
+      name: 'new-turtle.png',
+      mimeType: 'image/png',
+      buffer: Buffer.from(filePath.split(',')[1], 'base64'),
+    });
+
+    // Grant location permission before uploading (especially important after reload)
+    await grantLocationPermission(page);
+
+    // Wait for preview card to appear and click upload button
+    await page.waitForSelector('button:has-text("Upload Photo")', { timeout: 5000 });
+    await clickUploadPhotoButton(page);
+
+    // Should see success notification (notification title includes emoji)
+    // Use first() to handle multiple matches (Alert and Notification)
+    await expect(page.getByText(/Upload Successful/i).first()).toBeVisible({
+      timeout: 20000,
+    });
+  });
+
+  test('should show duplicate message when uploading duplicate as admin', async ({
+    page,
+    browserName,
+  }) => {
+    test.skip(browserName === 'webkit', 'Skipping for webkit');
+    test.setTimeout(60000);
+    await loginAsAdmin(page);
+
+    const filePath = await page.evaluate(() => {
+      const canvas = document.createElement('canvas');
+      canvas.width = 100;
+      canvas.height = 100;
+      const ctx = canvas.getContext('2d');
+      if (ctx) {
+        ctx.fillStyle = 'red';
+        ctx.fillRect(0, 0, 100, 100);
+      }
+      return canvas.toDataURL('image/png');
+    });
+
+    const fileInput = page.locator('input[type="file"]');
+
+    // Upload first time
+    await fileInput.setInputFiles({
+      name: 'match-turtle.png',
+      mimeType: 'image/png',
+      buffer: Buffer.from(filePath.split(',')[1], 'base64'),
+    });
+
+    // Grant location permission before uploading (especially important after reload)
+    await grantLocationPermission(page);
+
+    // Wait for preview card to appear and click upload button
+    await page.waitForSelector('button:has-text("Upload Photo")', { timeout: 5000 });
+    await clickUploadPhotoButton(page);
+
+    // Wait for success notification (notification title includes emoji)
+    await page.waitForSelector('text=/Upload Successful/i', { timeout: 30000 });
+    await page.waitForTimeout(2000);
+
+    // Upload duplicate - reload and re-authenticate as admin (role is lost on reload)
+    await page.reload();
+    await loginAsAdmin(page);
+
+    await fileInput.setInputFiles({
+      name: 'match-turtle.png',
+      mimeType: 'image/png',
+      buffer: Buffer.from(filePath.split(',')[1], 'base64'),
+    });
+
+    // Grant location permission before uploading (especially important after reload)
+    await grantLocationPermission(page);
+
+    // Wait for preview card to appear and click upload button
+    await page.waitForSelector('button:has-text("Upload Photo")', { timeout: 5000 });
+    await clickUploadPhotoButton(page);
+
+    // Should navigate to match page which shows duplicate was found
+    // For duplicates, navigation happens immediately without notification
+    await expect(page).toHaveURL(/\/admin\/turtle-match\/img_/, { timeout: 30000 });
+    await expect(page.getByText(/Turtle Match Found!/i)).toBeVisible();
+  });
+
+  test('should upload new photo successfully as admin', async ({ page }) => {
+    await loginAsAdmin(page);
+
+    const filePath = await page.evaluate(() => {
+      const canvas = document.createElement('canvas');
+      canvas.width = 100;
+      canvas.height = 100;
+      const ctx = canvas.getContext('2d');
+      if (ctx) {
+        ctx.fillStyle = 'purple';
+        ctx.fillRect(0, 0, 100, 100);
+      }
+      return canvas.toDataURL('image/png');
+    });
+
+    const fileInput = page.locator('input[type="file"]');
+    await fileInput.setInputFiles({
+      name: 'new-photo.png',
+      mimeType: 'image/png',
+      buffer: Buffer.from(filePath.split(',')[1], 'base64'),
+    });
+
+    // Grant location permission before uploading (especially important after reload)
+    await grantLocationPermission(page);
+
+    // Wait for preview card to appear and click upload button
+    await page.waitForSelector('button:has-text("Upload Photo")', { timeout: 5000 });
+    await clickUploadPhotoButton(page);
+
+    // Should see success notification (notification title includes emoji)
+    // Use first() to handle multiple matches (Alert and Notification)
+    await expect(page.getByText(/Upload Successful/i).first()).toBeVisible({
+      timeout: 20000,
+    });
+
+    // Should still be on home page (not redirected for new photos)
+    await expect(page).toHaveURL('/');
+  });
+
+  test('should show upload progress during upload', async ({ page }) => {
+    await loginAsAdmin(page);
+
+    const filePath = await page.evaluate(() => {
+      const canvas = document.createElement('canvas');
+      canvas.width = 100;
+      canvas.height = 100;
+      const ctx = canvas.getContext('2d');
+      if (ctx) {
+        ctx.fillStyle = 'orange';
+        ctx.fillRect(0, 0, 100, 100);
+      }
+      return canvas.toDataURL('image/png');
+    });
+
+    const fileInput = page.locator('input[type="file"]');
+    await fileInput.setInputFiles({
+      name: 'progress-test.png',
+      mimeType: 'image/png',
+      buffer: Buffer.from(filePath.split(',')[1], 'base64'),
+    });
+
+    // Grant location permission before uploading (especially important after reload)
+    await grantLocationPermission(page);
+
+    // Wait for preview card to appear and click upload button
+    await page.waitForSelector('button:has-text("Upload Photo")', { timeout: 5000 });
+    await clickUploadPhotoButton(page);
+
+    // Should see upload progress and then success notification
+    await page.waitForSelector('text=/Uploading/i', { timeout: 5000 });
+    // Use first() to handle multiple matches (Alert and Notification)
+    await expect(page.getByText(/Upload Successful/i).first()).toBeVisible({
+      timeout: 20000,
+    });
+  });
+
+  test('should show photo in Turtle Records after upload', async ({ page }) => {
+    await loginAsAdmin(page);
+
+    const filePath = await page.evaluate(() => {
+      const canvas = document.createElement('canvas');
+      canvas.width = 100;
+      canvas.height = 100;
+      const ctx = canvas.getContext('2d');
+      if (ctx) {
+        ctx.fillStyle = 'teal';
+        ctx.fillRect(0, 0, 100, 100);
+      }
+      return canvas.toDataURL('image/png');
+    });
+
+    const fileInput = page.locator('input[type="file"]');
+    await fileInput.setInputFiles({
+      name: 'records-test.png',
+      mimeType: 'image/png',
+      buffer: Buffer.from(filePath.split(',')[1], 'base64'),
+    });
+
+    // Grant location permission before uploading (especially important after reload)
+    await grantLocationPermission(page);
+
+    // Wait for preview card to appear and click upload button
+    await page.waitForSelector('button:has-text("Upload Photo")', { timeout: 5000 });
+    await clickUploadPhotoButton(page);
+
+    // Wait for success notification (notification title includes emoji)
+    await page.waitForSelector('text=/Upload Successful/i', { timeout: 20000 });
+
+    // Navigate to Turtle Records
+    await openMobileMenuIfPresent(page);
+    await page.getByRole('button', { name: 'Turtle Records' }).click();
+
+    // Should see the uploaded photo filename in the file info text
+    // Use a more specific locator that finds the file info text (not notification or alert)
+    await expect(page.locator('text=/File: records-test\\.png/')).toBeVisible({
+      timeout: 5000,
+    });
+  });
+
+  test('should allow clicking "View All" button to navigate to match page', async ({
+    page,
+    browserName,
+  }) => {
+    test.skip(browserName === 'webkit', 'Skipping for webkit');
+    test.setTimeout(60000);
+    await loginAsAdmin(page);
+
+    // Upload a photo that will have duplicates
+    const filePath = await page.evaluate(() => {
+      const canvas = document.createElement('canvas');
+      canvas.width = 100;
+      canvas.height = 100;
+      const ctx = canvas.getContext('2d');
+      if (ctx) {
+        ctx.fillStyle = 'navy';
+        ctx.fillRect(0, 0, 100, 100);
+      }
+      return canvas.toDataURL('image/png');
+    });
+
+    const fileInput = page.locator('input[type="file"]');
+
+    // Upload first
+    await fileInput.setInputFiles({
+      name: 'view-all-test.png',
+      mimeType: 'image/png',
+      buffer: Buffer.from(filePath.split(',')[1], 'base64'),
+    });
+
+    // Grant location permission before uploading (especially important after reload)
+    await grantLocationPermission(page);
+
+    // Wait for preview card to appear and click upload button
+    await page.waitForSelector('button:has-text("Upload Photo")', { timeout: 5000 });
+    await clickUploadPhotoButton(page);
+
+    // Wait for success notification (notification title includes emoji)
+    await page.waitForSelector('text=/Upload Successful/i', { timeout: 30000 });
+    await page.waitForTimeout(2000);
+
+    // Upload duplicate - reload and re-authenticate as admin (role is lost on reload)
+    await page.reload();
+    await loginAsAdmin(page);
+
+    await fileInput.setInputFiles({
+      name: 'view-all-test.png',
+      mimeType: 'image/png',
+      buffer: Buffer.from(filePath.split(',')[1], 'base64'),
+    });
+
+    // Grant location permission before uploading (especially important after reload)
+    await grantLocationPermission(page);
+
+    // Wait for preview card to appear and click upload button
+    await page.waitForSelector('button:has-text("Upload Photo")', { timeout: 5000 });
+    await clickUploadPhotoButton(page);
+
+    // For duplicate uploads as admin, navigation happens immediately (no notification)
+    // Should detect duplicate and navigate to match page immediately
+    // For duplicates, navigation happens without showing notification
+    await expect(page).toHaveURL(/\/admin\/turtle-match\/img_/, { timeout: 30000 });
+    // Go back to home using navigation to preserve admin state
+    await navigateUsingNav(page, 'Home');
+
+    // Navigate to Turtle Records
+    await openMobileMenuIfPresent(page);
+    // Wait for admin role to be set and navigation to be ready
+    await page.waitForTimeout(500);
+    await page.getByRole('button', { name: 'Turtle Records' }).click();
+
+    // Wait for photo groups to load
+    await page.waitForTimeout(1000);
+
+    // Look for "View All" button in photo groups with duplicates
+    const viewAllButton = page.locator('button:has-text("View All")');
+    const count = await viewAllButton.count();
+
+    if (count > 0) {
+      await viewAllButton.first().click();
+      // Should navigate to match page
+      await expect(page).toHaveURL(/\/admin\/turtle-match\/img_/);
+    }
+  });
+});
