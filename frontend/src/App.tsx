@@ -14,6 +14,7 @@ import AdminTurtleMatchPage from './pages/AdminTurtleMatchPage';
 import { store } from './store';
 import { useAppSelector } from './store/hooks';
 import { communityTheme, adminTheme } from './store/slices/themeSlice';
+import AuthProvider from './components/AuthProvider';
 
 function ThemeProvider({ children }: { children: React.ReactNode }) {
   const { role } = useAppSelector((state) => state.user);
@@ -25,24 +26,26 @@ function ThemeProvider({ children }: { children: React.ReactNode }) {
 function App(): React.JSX.Element {
   return (
     <Provider store={store}>
-      <ThemeProvider>
-        <Notifications position='top-right' zIndex={1000} />
-        <Router>
-          <Navigation>
-            <Routes>
-              <Route path='/' element={<HomePage />} />
-              <Route path='/about' element={<AboutPage />} />
-              <Route path='/contact' element={<ContactPage />} />
-              <Route path='/login' element={<LoginPage />} />
-              <Route path='/admin/turtle-records' element={<AdminTurtleRecordsPage />} />
-              <Route
-                path='/admin/turtle-match/:imageId'
-                element={<AdminTurtleMatchPage />}
-              />
-            </Routes>
-          </Navigation>
-        </Router>
-      </ThemeProvider>
+      <AuthProvider>
+        <ThemeProvider>
+          <Notifications position='top-right' zIndex={1000} />
+          <Router>
+            <Navigation>
+              <Routes>
+                <Route path='/' element={<HomePage />} />
+                <Route path='/about' element={<AboutPage />} />
+                <Route path='/contact' element={<ContactPage />} />
+                <Route path='/login' element={<LoginPage />} />
+                <Route path='/admin/turtle-records' element={<AdminTurtleRecordsPage />} />
+                <Route
+                  path='/admin/turtle-match/:imageId'
+                  element={<AdminTurtleMatchPage />}
+                />
+              </Routes>
+            </Navigation>
+          </Router>
+        </ThemeProvider>
+      </AuthProvider>
     </Provider>
   );
 }
