@@ -20,11 +20,14 @@ import {
   IconInfoCircle,
   IconMail,
   IconLogin,
+  IconLogout,
   IconUser,
   IconShield,
   IconPhoto,
 } from '@tabler/icons-react';
 import { useUser } from '../hooks/useUser';
+import { logout as apiLogout } from '../services/api';
+import { notifications } from '@mantine/notifications';
 
 interface NavigationProps {
   children: React.ReactNode;
@@ -42,12 +45,32 @@ export default function Navigation({ children }: NavigationProps) {
   const location = useLocation();
   const theme = useMantineTheme();
   const { colorScheme, toggleColorScheme } = useMantineColorScheme();
-  const { role } = useUser();
+  const { role, isLoggedIn, user, logout: setUserLogout } = useUser();
   const isMobile = useMediaQuery(`(max-width: ${theme.breakpoints.sm})`);
 
   const handleNavigation = (path: string) => {
     navigate(path);
     close();
+  };
+
+  const handleLogout = async () => {
+    try {
+      await apiLogout();
+      setUserLogout();
+      notifications.show({
+        title: 'Successfully logged out',
+        message: 'You have been logged out successfully.',
+        color: 'blue',
+      });
+      navigate('/');
+      close();
+    } catch (error) {
+      console.error('Logout error:', error);
+      // Still logout locally even if API call fails
+      setUserLogout();
+      navigate('/');
+      close();
+    }
   };
 
   // Get navigation items in the correct order based on role
@@ -129,34 +152,54 @@ export default function Navigation({ children }: NavigationProps) {
             </Group>
           )}
 
-          {/* Right side - Login, Theme Toggle, Mobile Menu */}
+          {/* Right side - Login/Logout, Theme Toggle, Mobile Menu */}
           <Group>
-            {/* Desktop Login Link */}
+            {/* Desktop Login/Logout Link */}
             {!isMobile && (
-              <Button
-                variant='subtle'
-                leftSection={<IconLogin size={16} />}
-                onClick={() => handleNavigation('/login')}
-                color={
-                  location.pathname === '/login'
-                    ? role === 'admin'
-                      ? 'red'
-                      : 'blue'
-                    : undefined
-                }
-                style={{
-                  backgroundColor:
-                    location.pathname === '/login'
-                      ? role === 'admin'
-                        ? theme.colors.red[6]
-                        : theme.colors.blue[6]
-                      : 'transparent',
-                  color: location.pathname === '/login' ? 'white' : undefined,
-                  transition: 'all 0.2s ease',
-                }}
-              >
-                Login
-              </Button>
+              <>
+                {isLoggedIn ? (
+                  <Group gap='xs'>
+                    {user && (
+                      <Text size='sm' c='dimmed'>
+                        {user.name || user.email}
+                      </Text>
+                    )}
+                    <Button
+                      variant='subtle'
+                      leftSection={<IconLogout size={16} />}
+                      onClick={handleLogout}
+                      color={role === 'admin' ? 'red' : 'blue'}
+                    >
+                      Logout
+                    </Button>
+                  </Group>
+                ) : (
+                  <Button
+                    variant='subtle'
+                    leftSection={<IconLogin size={16} />}
+                    onClick={() => handleNavigation('/login')}
+                    color={
+                      location.pathname === '/login'
+                        ? role === 'admin'
+                          ? 'red'
+                          : 'blue'
+                        : undefined
+                    }
+                    style={{
+                      backgroundColor:
+                        location.pathname === '/login'
+                          ? role === 'admin'
+                            ? theme.colors.red[6]
+                            : theme.colors.blue[6]
+                          : 'transparent',
+                      color: location.pathname === '/login' ? 'white' : undefined,
+                      transition: 'all 0.2s ease',
+                    }}
+                  >
+                    Login
+                  </Button>
+                )}
+              </>
             )}
 
             {/* Color Scheme Toggle */}
@@ -187,31 +230,49 @@ export default function Navigation({ children }: NavigationProps) {
             ))}
           </Stack>
 
-          {/* Login link pushed to bottom */}
-          <Button
-            variant='light'
-            leftSection={<IconLogin size={16} />}
-            onClick={() => handleNavigation('/login')}
-            color={
-              location.pathname === '/login'
-                ? role === 'admin'
-                  ? 'red'
-                  : 'blue'
-                : undefined
-            }
-            style={{
-              backgroundColor:
+          {/* Login/Logout link pushed to bottom */}
+          {isLoggedIn ? (
+            <Stack gap='xs'>
+              {user && (
+                <Text size='sm' c='dimmed' ta='center' p='xs'>
+                  {user.name || user.email}
+                </Text>
+              )}
+              <Button
+                variant='light'
+                leftSection={<IconLogout size={16} />}
+                onClick={handleLogout}
+                color={role === 'admin' ? 'red' : 'blue'}
+              >
+                Logout
+              </Button>
+            </Stack>
+          ) : (
+            <Button
+              variant='light'
+              leftSection={<IconLogin size={16} />}
+              onClick={() => handleNavigation('/login')}
+              color={
                 location.pathname === '/login'
                   ? role === 'admin'
-                    ? theme.colors.red[6]
-                    : theme.colors.blue[6]
-                  : undefined,
-              color: location.pathname === '/login' ? 'white' : undefined,
-              transition: 'all 0.2s ease',
-            }}
-          >
-            Login
-          </Button>
+                    ? 'red'
+                    : 'blue'
+                  : undefined
+              }
+              style={{
+                backgroundColor:
+                  location.pathname === '/login'
+                    ? role === 'admin'
+                      ? theme.colors.red[6]
+                      : theme.colors.blue[6]
+                    : undefined,
+                color: location.pathname === '/login' ? 'white' : undefined,
+                transition: 'all 0.2s ease',
+              }}
+            >
+              Login
+            </Button>
+          )}
         </Stack>
       </Drawer>
 
