@@ -157,7 +157,7 @@ export function usePhotoUpload({
         }
 
         notifications.show({
-          title: 'Upload Successful! 🎉',
+          title: 'Upload Successful!',
           message: response.message,
           color: 'green',
           icon: <IconCheck size={18} />,
