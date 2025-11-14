@@ -21,6 +21,7 @@ export interface RegisterRequest {
   email: string;
   password: string;
   name?: string;
+  token?: string;
 }
 
 export interface LoginRequest {
@@ -138,5 +139,52 @@ export const logout = async (): Promise<void> => {
 // Google OAuth URL
 export const getGoogleAuthUrl = (): string => {
   return `${API_BASE_URL.replace('/api', '')}/api/auth/google`;
+};
+
+// Get invitation details by token
+export interface InvitationDetails {
+  success: boolean;
+  invitation: {
+    email: string;
+    expires_at: string;
+  };
+}
+
+export const getInvitationDetails = async (token: string): Promise<InvitationDetails> => {
+  const response = await apiRequest(`/auth/invitation/${token}`, {
+    method: 'GET',
+  });
+
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.error || 'Failed to get invitation details');
+  }
+
+  return await response.json();
+};
+
+// Promote user to admin (admin only)
+export interface PromoteToAdminResponse {
+  success: boolean;
+  message: string;
+  user: {
+    id: number;
+    email: string;
+    role: 'admin';
+  };
+}
+
+export const promoteToAdmin = async (email: string): Promise<PromoteToAdminResponse> => {
+  const response = await apiRequest('/admin/promote-to-admin', {
+    method: 'POST',
+    body: JSON.stringify({ email }),
+  });
+
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.error || 'Failed to promote user to admin');
+  }
+
+  return await response.json();
 };
 

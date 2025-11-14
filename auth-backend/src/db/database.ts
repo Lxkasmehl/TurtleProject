@@ -28,9 +28,20 @@ interface User {
   updated_at: string;
 }
 
+interface AdminInvitation {
+  id: number;
+  email: string;
+  token: string;
+  created_at: string;
+  expires_at: string;
+  used: boolean;
+}
+
 interface Database {
   users: User[];
+  admin_invitations: AdminInvitation[];
   nextId: number;
+  nextInvitationId: number;
 }
 
 // Load or create database
@@ -38,7 +49,15 @@ function loadDatabase(): Database {
   if (existsSync(dbPath)) {
     try {
       const data = readFileSync(dbPath, 'utf-8');
-      return JSON.parse(data);
+      const db = JSON.parse(data);
+      // Ensure new fields exist for backward compatibility
+      if (!db.admin_invitations) {
+        db.admin_invitations = [];
+      }
+      if (!db.nextInvitationId) {
+        db.nextInvitationId = 1;
+      }
+      return db;
     } catch (error) {
       console.error('Error loading database, creating new one:', error);
     }
@@ -46,7 +65,9 @@ function loadDatabase(): Database {
 
   return {
     users: [],
+    admin_invitations: [],
     nextId: 1,
+    nextInvitationId: 1,
   };
 }
 
@@ -78,15 +99,116 @@ class DatabaseWrapper {
 
     // SELECT queries
     if (upperSql.startsWith('SELECT')) {
-      let results = [...database.users];
+      // Reload database to ensure we have the latest data
+      database = loadDatabase();
 
-      // Simple WHERE clause parsing
+      // Determine which table to query
+      let tableName = 'users';
+      if (sql.includes('FROM admin_invitations')) {
+        tableName = 'admin_invitations';
+      } else if (sql.includes('FROM users')) {
+        tableName = 'users';
+      }
+
+      let results: any[] = [];
+      if (tableName === 'users') {
+        results = [...database.users];
+      } else if (tableName === 'admin_invitations') {
+        results = [...(database.admin_invitations || [])];
+      }
+
+      // WHERE clause parsing - supports multiple conditions with AND
       if (sql.includes('WHERE')) {
-        const whereMatch = sql.match(/WHERE\s+(\w+)\s*=\s*\?/i);
-        if (whereMatch && params.length > 0) {
-          const column = whereMatch[1];
-          const value = params[0];
-          results = results.filter((row: any) => row[column] === value);
+        const whereClause = sql.match(/WHERE\s+(.+?)(?:\s+ORDER BY|\s*$)/i)?.[1];
+        if (whereClause) {
+          // Split by AND to handle multiple conditions
+          const conditions = whereClause.split(/\s+AND\s+/i).map((c) => c.trim());
+          let paramIndex = 0;
+
+          // Extract parameter indices for each condition (once, before filtering)
+          const conditionParams: Array<{ column: string; paramIndex: number }> = [];
+          conditions.forEach((condition) => {
+            const eqMatch = condition.match(/(\w+)\s*=\s*\?/i);
+            if (eqMatch) {
+              conditionParams.push({ column: eqMatch[1], paramIndex: paramIndex++ });
+            }
+          });
+
+          // Reset paramIndex for actual filtering
+          paramIndex = 0;
+
+          results = results.filter((row: any) => {
+            return conditionParams.every(({ column, paramIndex: paramIdx }) => {
+              const value = params[paramIdx];
+              const rowValue = row[column];
+
+              // Handle null comparisons
+              if (value === null || value === undefined) {
+                return rowValue === null || rowValue === undefined;
+              }
+              if (rowValue === null || rowValue === undefined) {
+                return false;
+              }
+
+              // Case-insensitive comparison for email
+              if (
+                column === 'email' &&
+                typeof rowValue === 'string' &&
+                typeof value === 'string'
+              ) {
+                return rowValue.toLowerCase() === value.toLowerCase();
+              }
+
+              // String comparison for google_id (always compare as strings)
+              if (column === 'google_id') {
+                return String(rowValue) === String(value);
+              }
+
+              // Handle type coercion for ID comparisons (number vs string)
+              const matches =
+                rowValue === value ||
+                String(rowValue) === String(value) ||
+                (Number(rowValue) === Number(value) &&
+                  !isNaN(Number(rowValue)) &&
+                  !isNaN(Number(value)));
+              return matches;
+            });
+          });
+
+          // Handle other condition types (like datetime comparisons, boolean checks, etc.)
+          // These need to be applied in addition to the parameterized conditions
+          const otherConditions = conditions.filter((c) => !c.match(/(\w+)\s*=\s*\?/i));
+          if (otherConditions.length > 0) {
+            results = results.filter((row: any) => {
+              return otherConditions.every((condition) => {
+                // Handle: column = 0 (for boolean false)
+                const eqZeroMatch = condition.match(/(\w+)\s*=\s*0/i);
+                if (eqZeroMatch) {
+                  const column = eqZeroMatch[1];
+                  return row[column] === false || row[column] === 0;
+                }
+
+                // Handle: column > datetime("now")
+                const gtNowMatch = condition.match(/(\w+)\s*>\s*datetime\("now"\)/i);
+                if (gtNowMatch) {
+                  const column = gtNowMatch[1];
+                  const now = new Date().toISOString();
+                  return row[column] > now;
+                }
+
+                // Handle: column > datetime('now')
+                const gtNowMatch2 = condition.match(/(\w+)\s*>\s*datetime\('now'\)/i);
+                if (gtNowMatch2) {
+                  const column = gtNowMatch2[1];
+                  const now = new Date().toISOString();
+                  return row[column] > now;
+                }
+
+                // Default: return true if condition doesn't match known patterns
+                return true;
+              });
+            });
+          }
         }
       }
 
@@ -140,18 +262,80 @@ class DatabaseWrapper {
                 : values[index] === '?'
                 ? null
                 : values[index];
-            if (col === 'email') user.email = value;
-            else if (col === 'password_hash') user.password_hash = value;
+            if (col === 'email') {
+              // Normalize email to lowercase
+              user.email = value ? String(value).toLowerCase() : '';
+            } else if (col === 'password_hash') user.password_hash = value;
             else if (col === 'name') user.name = value;
             else if (col === 'google_id') user.google_id = value;
             else if (col === 'role') user.role = value;
           });
 
+          // Check for duplicate email (case-insensitive) before inserting
+          if (user.email) {
+            const existingUser = database.users.find(
+              (u) => u.email.toLowerCase() === user.email.toLowerCase()
+            );
+            if (existingUser) {
+              throw new Error(`User with email ${user.email} already exists`);
+            }
+          }
+
+          // Check for duplicate google_id before inserting
+          if (user.google_id) {
+            const existingUser = database.users.find(
+              (u) => u.google_id === user.google_id
+            );
+            if (existingUser) {
+              throw new Error(`User with Google ID ${user.google_id} already exists`);
+            }
+          }
+
           database.users.push(user);
           saveDatabase(database);
+          // Force reload to ensure consistency - use setTimeout to ensure file is written
+          // But actually, we should reload immediately since saveDatabase is synchronous
+          database = loadDatabase();
 
           return {
             lastInsertRowid: user.id,
+            changes: 1,
+          };
+        } else if (table === 'admin_invitations') {
+          if (!database.admin_invitations) {
+            database.admin_invitations = [];
+          }
+          if (!database.nextInvitationId) {
+            database.nextInvitationId = 1;
+          }
+
+          const invitation: AdminInvitation = {
+            id: database.nextInvitationId++,
+            email: '',
+            token: '',
+            created_at: new Date().toISOString(),
+            expires_at: '',
+            used: false,
+          };
+
+          columns.forEach((col, index) => {
+            const value =
+              params[index] !== undefined
+                ? params[index]
+                : values[index] === '?'
+                ? null
+                : values[index];
+            if (col === 'email') invitation.email = value;
+            else if (col === 'token') invitation.token = value;
+            else if (col === 'expires_at') invitation.expires_at = value;
+            else if (col === 'used') invitation.used = value === true || value === 1;
+          });
+
+          database.admin_invitations.push(invitation);
+          saveDatabase(database);
+
+          return {
+            lastInsertRowid: invitation.id,
           };
         }
       }
@@ -233,6 +417,56 @@ class DatabaseWrapper {
             // Reload database to ensure consistency
             database = loadDatabase();
           }
+        } else if (table === 'admin_invitations') {
+          if (!database.admin_invitations) {
+            database.admin_invitations = [];
+          }
+
+          const setParts = setClause.split(',').map((p) => p.trim());
+          const setColumns: { col: string; paramIndex: number }[] = [];
+          let paramIndex = 0;
+
+          setParts.forEach((part) => {
+            const setMatch = part.match(/(\w+)\s*=\s*(.+)/);
+            if (setMatch) {
+              const col = setMatch[1];
+              const valueExpr = setMatch[2].trim();
+              if (valueExpr === '?') {
+                setColumns.push({ col, paramIndex });
+                paramIndex++;
+              }
+            }
+          });
+
+          const whereParamIndex = paramIndex;
+          let updated = 0;
+
+          database.admin_invitations.forEach((invitation) => {
+            let matches = true;
+
+            if (whereClause) {
+              const whereMatch = whereClause.match(/(\w+)\s*=\s*\?/);
+              if (whereMatch) {
+                const column = whereMatch[1];
+                const value = params[whereParamIndex];
+                matches = (invitation as any)[column] === value;
+              }
+            }
+
+            if (matches) {
+              setColumns.forEach(({ col, paramIndex: idx }) => {
+                if (col === 'used' && idx >= 0) {
+                  invitation.used = params[idx] === true || params[idx] === 1;
+                }
+              });
+              updated++;
+            }
+          });
+
+          if (updated > 0) {
+            saveDatabase(database);
+            database = loadDatabase();
+          }
         }
       }
     }
@@ -287,6 +521,18 @@ db.exec(`
 db.exec(`
   CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
   CREATE INDEX IF NOT EXISTS idx_users_google_id ON users(google_id);
+`);
+
+// Create admin_invitations table structure (implicit in JSON)
+db.exec(`
+  CREATE TABLE IF NOT EXISTS admin_invitations (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    email TEXT NOT NULL,
+    token TEXT UNIQUE NOT NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    expires_at DATETIME NOT NULL,
+    used BOOLEAN DEFAULT 0
+  )
 `);
 
 export default db;

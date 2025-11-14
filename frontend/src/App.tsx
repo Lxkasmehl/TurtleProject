@@ -11,6 +11,7 @@ import ContactPage from './pages/ContactPage';
 import LoginPage from './pages/LoginPage';
 import AdminTurtleRecordsPage from './pages/AdminTurtleRecordsPage';
 import AdminTurtleMatchPage from './pages/AdminTurtleMatchPage';
+import AdminUserManagementPage from './pages/AdminUserManagementPage';
 import { store } from './store';
 import { useAppSelector } from './store/hooks';
 import { communityTheme, adminTheme } from './store/slices/themeSlice';
@@ -36,6 +37,7 @@ function App(): React.JSX.Element {
                 <Route path='/about' element={<AboutPage />} />
                 <Route path='/contact' element={<ContactPage />} />
                 <Route path='/login' element={<LoginPage />} />
+                <Route path='/register' element={<LoginPage initialMode='signup' />} />
                 <Route
                   path='/admin/turtle-records'
                   element={<AdminTurtleRecordsPage />}
@@ -44,6 +46,7 @@ function App(): React.JSX.Element {
                   path='/admin/turtle-match/:imageId'
                   element={<AdminTurtleMatchPage />}
                 />
+                <Route path='/admin/users' element={<AdminUserManagementPage />} />
               </Routes>
             </Navigation>
           </Router>

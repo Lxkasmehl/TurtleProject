@@ -28,11 +28,18 @@ import {
   getGoogleAuthUrl,
   getCurrentUser,
   setToken,
+  getInvitationDetails,
 } from '../services/api';
 import { useUser } from '../hooks/useUser';
 
-export default function LoginPage(): React.JSX.Element {
-  const [isSignUp, setIsSignUp] = useState(false);
+interface LoginPageProps {
+  initialMode?: 'login' | 'signup';
+}
+
+export default function LoginPage({
+  initialMode = 'login',
+}: LoginPageProps): React.JSX.Element {
+  const [isSignUp, setIsSignUp] = useState(initialMode === 'signup');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
@@ -44,16 +51,46 @@ export default function LoginPage(): React.JSX.Element {
   const hasProcessedOAuth = useRef(false);
   const hasRedirected = useRef(false);
 
+  // Get invitation token from URL if present
+  const invitationToken = searchParams.get('token');
+
+  // If there's a token in the URL, automatically switch to signup mode and fetch invitation details
+  useEffect(() => {
+    if (invitationToken && !isSignUp) {
+      setIsSignUp(true);
+    }
+
+    // Fetch invitation details to pre-fill email
+    if (invitationToken) {
+      getInvitationDetails(invitationToken)
+        .then((details: { invitation?: { email?: string } }) => {
+          if (details.invitation?.email) {
+            setEmail(details.invitation.email);
+          }
+        })
+        .catch((err: unknown) => {
+          console.error('Failed to fetch invitation details:', err);
+          // Don't show error to user, they can still enter email manually
+        });
+    }
+  }, [invitationToken, isSignUp]);
+
   // Handle Google OAuth callback
   useEffect(() => {
     // Prevent multiple executions
     if (hasProcessedOAuth.current) return;
 
+    // Skip OAuth processing if this is an invitation token (only token param, no email/role)
     const token = searchParams.get('token');
     const emailParam = searchParams.get('email');
     const nameParam = searchParams.get('name');
     const roleParam = searchParams.get('role');
     const errorParam = searchParams.get('error');
+
+    // If there's only a token but no email/role, it's an invitation token, not OAuth
+    if (token && !emailParam && !roleParam) {
+      return; // Let the invitation token handling proceed
+    }
 
     if (errorParam) {
       setError(
@@ -102,14 +139,20 @@ export default function LoginPage(): React.JSX.Element {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams]);
 
-  // Redirect if already logged in (but not during OAuth processing)
+  // Redirect if already logged in (but not during OAuth processing or invitation registration)
   useEffect(() => {
-    if (isLoggedIn && !hasProcessedOAuth.current && !hasRedirected.current) {
+    // Don't redirect if there's an invitation token - allow registration even if logged in
+    if (
+      isLoggedIn &&
+      !hasProcessedOAuth.current &&
+      !hasRedirected.current &&
+      !invitationToken
+    ) {
       hasRedirected.current = true;
       navigate('/');
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isLoggedIn]);
+  }, [isLoggedIn, invitationToken]);
 
   const handleSubmit = async () => {
     setError(null);
@@ -118,14 +161,27 @@ export default function LoginPage(): React.JSX.Element {
     try {
       if (isSignUp) {
         // Registration
-        const response = await apiRegister({ email, password, name: name || undefined });
+        const response = await apiRegister({
+          email,
+          password,
+          name: name || undefined,
+          token: invitationToken || undefined,
+        });
         setUserLogin(response.user);
+        const roleMessage =
+          response.user.role === 'admin'
+            ? 'Your admin account has been created successfully!'
+            : 'Account created successfully!';
         notifications.show({
-          title: 'Account created successfully!',
+          title: roleMessage,
           message: `Welcome, ${response.user.name || response.user.email}!`,
           color: 'green',
           icon: <IconCheck size={18} />,
         });
+        // Clean URL if there was a token
+        if (invitationToken) {
+          window.history.replaceState({}, '', '/login');
+        }
         navigate('/');
       } else {
         // Login
@@ -171,7 +227,9 @@ export default function LoginPage(): React.JSX.Element {
           </Title>
           <Text c='dimmed' ta='center' size='sm'>
             {isSignUp
-              ? 'Create a new account to get started'
+              ? invitationToken
+                ? 'Complete your admin registration'
+                : 'Create a new account to get started'
               : 'Sign in to your account to continue'}
           </Text>
 
@@ -308,7 +366,7 @@ export default function LoginPage(): React.JSX.Element {
                 d='M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0 5.482 0 2.438 2.017.957 4.961L3.964 7.293C4.672 5.163 6.656 3.58 9 3.58z'
               />
             </svg>
-            <span>{isSignUp ? 'Sign up with Google' : 'Sign in with Google'}</span>
+            <span>Continue with Google</span>
           </button>
 
           <Divider />

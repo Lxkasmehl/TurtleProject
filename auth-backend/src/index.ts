@@ -1,6 +1,23 @@
 // Load environment variables FIRST, before any other imports
 import dotenv from 'dotenv';
-dotenv.config();
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+// Load .env file from auth-backend directory
+// __dirname is auth-backend/src, so we go up one level to auth-backend
+const envPath = path.join(__dirname, '../.env');
+const result = dotenv.config({ path: envPath });
+
+if (result.error) {
+  console.log('⚠️  .env file not found or error loading it:', result.error.message);
+  console.log('   Looking for .env at:', envPath);
+  console.log('   Make sure the .env file exists in the auth-backend folder\n');
+} else {
+  console.log('✅ .env file loaded successfully\n');
+}
 
 import express from 'express';
 import cors from 'cors';
@@ -9,6 +26,8 @@ import authRoutes from './routes/auth.js';
 import googleAuthRoutes from './routes/googleAuth.js';
 import adminRoutes from './routes/admin.js';
 import passport from './config/passport.js';
+// Import email service to initialize SMTP configuration check
+import './services/email.js';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -53,4 +72,3 @@ app.listen(PORT, () => {
   console.log(`🚀 Auth Server running on http://localhost:${PORT}`);
   console.log(`📝 Environment: ${process.env.NODE_ENV || 'development'}`);
 });
-
