@@ -10,6 +10,7 @@ This is a **separate authentication service** that handles:
 - Google OAuth integration
 - Role-based access control (community/admin)
 - User management for admins
+- Email notifications for admin promotions and invitations
 
 The turtle identification backend is in the `backend/` folder and is developed by a separate team.
 
@@ -54,6 +55,14 @@ FRONTEND_URL=http://localhost:5173
 
 # Auth Backend URL (for OAuth callback - optional, defaults to http://localhost:PORT)
 # AUTH_BACKEND_URL=http://localhost:3001
+
+# Email Configuration (SMTP) - Optional, emails will be logged to console if not configured
+# SMTP_HOST=smtp.gmail.com
+# SMTP_PORT=587
+# SMTP_SECURE=false
+# SMTP_USER=your-email@gmail.com
+# SMTP_PASSWORD=your-app-password
+# SMTP_FROM=noreply@turtleproject.com
 ```
 
 **Important:** Generate secure secrets for `JWT_SECRET` and `SESSION_SECRET`. You can use this command:
@@ -346,6 +355,152 @@ Make sure the `data/` directory exists and is writable. The database will be cre
    - Make sure the OAuth consent screen is configured
    - Go to "APIs & Services" > "OAuth consent screen"
    - Add your email as a test user if in testing mode
+
+### Email Configuration (SMTP)
+
+To send real emails (for admin promotions and invitations), you need to configure SMTP settings in your `.env` file.
+
+#### Option 1: Gmail
+
+**Important:** App Passwords are only available for:
+
+- Personal Google accounts (not Google Workspace/Enterprise accounts)
+- Accounts with 2-Step Verification enabled
+- Some accounts may not have App Passwords available due to account type or security settings
+
+1. **Enable 2-Step Verification** on your Google Account:
+
+   - Go to [Google Account Security](https://myaccount.google.com/security)
+   - Enable "2-Step Verification"
+
+2. **Create an App Password**:
+
+   - Go to [App Passwords](https://myaccount.google.com/apppasswords)
+   - If you don't see "App Passwords", it may not be available for your account type
+   - Select "Mail" and "Other (Custom name)"
+   - Enter "Turtle Project" as the name
+   - Copy the generated 16-character password
+
+3. **Add to `.env`**:
+   ```env
+   SMTP_HOST=smtp.gmail.com
+   SMTP_PORT=587
+   SMTP_SECURE=false
+   SMTP_USER=your-email@gmail.com
+   SMTP_PASSWORD=your-16-character-app-password
+   SMTP_FROM=your-email@gmail.com
+   ```
+
+**If App Passwords are not available:**
+
+- **Option A:** Use a different email provider (see Options 2-3 below)
+- **Option B:** Use Gmail OAuth2 (more complex, requires additional setup)
+- **Option C:** Use a dedicated email service like SendGrid, Mailgun, or AWS SES (recommended for production)
+
+#### Option 2: Outlook/Hotmail
+
+1. **Enable App Passwords**:
+
+   - Go to [Microsoft Account Security](https://account.microsoft.com/security)
+   - Enable "Two-step verification"
+   - Go to "App passwords" and create a new one
+
+2. **Add to `.env`**:
+   ```env
+   SMTP_HOST=smtp-mail.outlook.com
+   SMTP_PORT=587
+   SMTP_SECURE=false
+   SMTP_USER=your-email@outlook.com
+   SMTP_PASSWORD=your-app-password
+   SMTP_FROM=your-email@outlook.com
+   ```
+
+#### Option 3: Other SMTP Providers
+
+For other providers (SendGrid, Mailgun, AWS SES, etc.), use their SMTP settings:
+
+**SendGrid (Recommended - Free tier: 100 emails/day):**
+
+1. **Sign up for free account:**
+
+   - Go to [sendgrid.com](https://sendgrid.com) and create a free account
+   - Verify your email address
+
+2. **Create API Key:**
+
+   - Go to Settings > API Keys
+   - Click "Create API Key"
+   - Name it "Turtle Project" and give it "Full Access" or "Mail Send" permissions
+   - Copy the API key (you'll only see it once!)
+
+3. **Add to `.env`**:
+
+   ```env
+   SMTP_HOST=smtp.sendgrid.net
+   SMTP_PORT=587
+   SMTP_SECURE=false
+   SMTP_USER=apikey
+   SMTP_PASSWORD=your-sendgrid-api-key-here
+   SMTP_FROM=noreply@turtleproject.com
+   ```
+
+   **Note:** For `SMTP_FROM`, you can use any email address. SendGrid will send from this address (no verification needed for free tier in most cases).
+
+**Mailgun:**
+
+```env
+SMTP_HOST=smtp.mailgun.org
+SMTP_PORT=587
+SMTP_SECURE=false
+SMTP_USER=your-mailgun-username
+SMTP_PASSWORD=your-mailgun-password
+SMTP_FROM=noreply@yourdomain.com
+```
+
+**AWS SES:**
+
+```env
+SMTP_HOST=email-smtp.region.amazonaws.com
+SMTP_PORT=587
+SMTP_SECURE=false
+SMTP_USER=your-aws-smtp-username
+SMTP_PASSWORD=your-aws-smtp-password
+SMTP_FROM=noreply@yourdomain.com
+```
+
+#### Troubleshooting Gmail App Passwords
+
+**Problem: "App Passwords" option is not visible**
+
+This can happen for several reasons:
+
+1. **Google Workspace/Enterprise Account:**
+
+   - App Passwords may be disabled by your organization's admin
+   - Contact your IT administrator or use a personal Gmail account
+   - Alternative: Use a dedicated email service (SendGrid, Mailgun, etc.)
+
+2. **Account Type Restrictions:**
+
+   - Some Google account types don't support App Passwords
+   - Try using a different email provider
+
+3. **2-Step Verification Not Fully Enabled:**
+
+   - Make sure 2-Step Verification is fully set up and verified
+   - Wait a few minutes after enabling before trying to create App Passwords
+
+4. **Alternative Solutions:**
+   - Use Outlook/Hotmail (see Option 2) - often easier to set up
+   - Use a free email service like SendGrid (free tier: 100 emails/day)
+   - Use Mailgun (free tier: 5,000 emails/month for 3 months)
+   - Use AWS SES (very cheap, pay-as-you-go)
+
+#### Development Mode (No SMTP)
+
+If SMTP is not configured, emails will be logged to the console instead of being sent. This is useful for development and testing.
+
+**Note:** Make sure to restart the server after adding SMTP configuration.
 
 ### Cannot create admin
 

@@ -24,6 +24,7 @@ import {
   IconUser,
   IconShield,
   IconPhoto,
+  IconUsers,
 } from '@tabler/icons-react';
 import { useUser } from '../hooks/useUser';
 import { logout as apiLogout } from '../services/api';
@@ -77,11 +78,16 @@ export default function Navigation({ children }: NavigationProps) {
   const getNavigationItems = () => {
     const items = [...navigationItems];
     if (role === 'admin') {
-      // Insert Turtle Records after Home
+      // Insert admin items after Home
       items.splice(1, 0, {
         label: 'Turtle Records',
         path: '/admin/turtle-records',
         icon: IconPhoto,
+      });
+      items.splice(2, 0, {
+        label: 'User Management',
+        path: '/admin/users',
+        icon: IconUsers,
       });
     }
     return items;
