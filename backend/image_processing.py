@@ -10,12 +10,29 @@ from sklearn.decomposition import PCA
 
 
 #Initialization
+SIFT_NFEATURES = 0
+SIFT_NOCTAVE_LAYERS = 3
+SIFT_CONTRAST_THRESHOLD = 0.04
+SIFT_EDGE_THRESHOLD = 10
+SIFT_SIGMA = 1.6
 
+APPLY_CLAHE_PRECOMP = True
+CLAHE_CLIP_LIMIT = 1.0
+CLAHE_TILE_GRID_SIZE = (16, 16)
 #Creating the SIFT detector once instead of every time we need it
 
 def get_SIFT():
 
-    return cv.SIFT_create()
+    return cv.SIFT_create(
+    nfeatures=SIFT_NFEATURES,
+    nOctaveLayers=SIFT_NOCTAVE_LAYERS,
+    contrastThreshold=SIFT_CONTRAST_THRESHOLD,
+    edgeThreshold=SIFT_EDGE_THRESHOLD,
+    sigma=SIFT_SIGMA)
+
+def get_CLAHE():
+    return cv.createCLAHE(clipLimit=CLAHE_CLIP_LIMIT, tileGridSize=CLAHE_TILE_GRID_SIZE)
+
 
 def load_vocabulary(vocab_path):
     print('Loading vocabulary...')
@@ -51,6 +68,10 @@ def process_image_through_SIFT(image_path, output_path):
     if imgGray is None:
         print(f"Failed to load Image: {image_path}")
         return False, None
+
+    #Applying CLAHE here
+    clahe = get_CLAHE()
+    imgGray = clahe.apply(imgGray)
 
     keypoints, descriptors = SIFT.detectAndCompute(imgGray, None)
 
