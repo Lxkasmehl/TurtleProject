@@ -31,7 +31,9 @@ def get_SIFT():
     sigma=SIFT_SIGMA)
 
 def get_CLAHE():
-    return cv.createCLAHE(clipLimit=CLAHE_CLIP_LIMIT, tileGridSize=CLAHE_TILE_GRID_SIZE)
+    return cv.createCLAHE(
+        clipLimit=CLAHE_CLIP_LIMIT,
+        tileGridSize=CLAHE_TILE_GRID_SIZE)
 
 
 def load_vocabulary(vocab_path):
