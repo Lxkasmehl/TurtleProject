@@ -11,8 +11,10 @@ from sklearn.decomposition import PCA
 import matplotlib.pyplot as plt
 import plotly.express as px
 import pandas as pd
+'''
+#SIFT_RESULT_PATH = "../../../Desktop/SIFT RESULTS/"
+SIFT_RESULT_PATH = "../../../Fall 2025/SIFT RESULTS/"
 
-SIFT_RESULT_PATH = "../../../Desktop/SIFT RESULTS/"
 all_descriptors = []
 vlad_vectors = []
 
@@ -76,7 +78,12 @@ def SIFT():
     while image_paths:
         image_path = image_paths.pop(0) if image_paths else None
         imgGray = cv.imread(image_path,cv.IMREAD_GRAYSCALE)
-
+        #imgGray = cv.imread(image_path,cv.COLOR_BGR2GRAY)
+        clahe = cv.createCLAHE(clipLimit=2)
+        imgGray = np.clip(clahe.apply(imgGray) + 30, 0, 255).astype(np.uint8)
+        _, imgThreshold = cv.threshold(imgGray, 155, 255, cv.THRESH_BINARY)
+        cv.imshow("Ordinary Threshold", imgThreshold)
+        cv.imshow("CLAHE Image", imgGray)
 
         sift = cv.SIFT_create()
         keypoints = sift.detect(imgGray,None)
@@ -104,10 +111,10 @@ def SIFT():
         new_filename = f"{filename_base}_{x}.npz"
         np.savez(os.path.join(SIFT_RESULT_PATH,new_filename), image = imgGray, keypoints = kp_array, descriptors = descriptors)
 
-        #plt.figure()
-        #plt.imshow(imgGray)
-        #plt.title(f"Keypoints: {len(keypoints)}")
-        #plt.show()
+        plt.figure()
+        plt.imshow(imgGray)
+        plt.title(f"Keypoints: {len(keypoints)}")
+        plt.show()
     print("All Done.")
 
 def SIFT_from_file(file_paths):
@@ -132,7 +139,7 @@ def matching_SIFT_files():
     if len(file_paths) < 2:
         print("Select atleast 2 .npz files")
         return
-    MIN_MATCH_COUNT = 40
+    MIN_MATCH_COUNT = 10
 
     # get our sift data back out of the npz files
     sift_data = SIFT_from_file(file_paths)
@@ -217,7 +224,7 @@ def plotly_VLAD_clusters():
     df["label"] = labels
 
     # Plot with Plotly
-    fig = px.scatter(df, x="x", y="y", text="label", title="Turtle Cluster Map via VLAD + PCA")
+    fig = px.scatter(df, x="x", y="y", text="label", title="Turtle Cluster Map via VLAD + plotly")
     fig.update_traces(textposition='top center')
     fig.update_layout(height=600, width=900)
     fig.show()
@@ -248,6 +255,6 @@ if __name__ == '__main__':
     #SIFT()
     #select_several_images()
 
-
+'''
 
 

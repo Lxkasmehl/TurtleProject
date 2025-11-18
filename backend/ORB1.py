@@ -7,7 +7,8 @@ import tkinter as tk
 from tkinter import Tk, filedialog, Label
 from PIL import Image, ImageTk
 
-ORB_RESULT_PATH = "../../../Desktop/ORB RESULTS/"
+#ORB_RESULT_PATH = "../../../Desktop/ORB RESULTS/"
+ORB_RESULT_PATH = "../../../Fall 2025/ORB RESULTS/"
 
 def select_several_images():
     root = Tk()
@@ -114,7 +115,7 @@ def matching_ORB_files():
     if len(file_paths) < 2:
         print("Select atleast 2 .npz files")
         return
-    MIN_MATCH_COUNT = 40
+    MIN_MATCH_COUNT = 10
 
     # get our sift data back out of the npz files
     orb_data = ORB_from_file(file_paths)
