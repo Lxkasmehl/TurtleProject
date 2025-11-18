@@ -76,7 +76,7 @@ def gui_command_match_SIFT():
         print("Select at least 2 .npz files.")
         return
 
-    MIN_MATCH_COUNT = 20
+    MIN_MATCH_COUNT = 10
     bf = cv.BFMatcher()  # The matcher object
 
     # Load all the data first
@@ -88,7 +88,7 @@ def gui_command_match_SIFT():
 
     names = list(sift_data.keys())
 
-    # Perform the pairwise (N vs N) matching
+    # Pairwise Matching
     for i in range(len(names)):
         for j in range(i + 1, len(names)):
             name1 = names[i]
@@ -97,21 +97,52 @@ def gui_command_match_SIFT():
             img1, kp1, des1 = sift_data[name1]
             img2, kp2, des2 = sift_data[name2]
 
+            #Initial Match
             matches = bf.knnMatch(des1, des2, k=2)
-            good_matches = [m for m, n in matches if m.distance < 0.70 * n.distance]
+
+            good_matches = []
+            for m, n in matches:
+                if m.distance < 0.70 * n.distance:
+                    good_matches.append(m)
 
             if len(good_matches) >= MIN_MATCH_COUNT:
-                print(f"Found match: {name1} <-> {name2} ({len(good_matches)} matches)")
-                # Logic to draw matches (This is a GUI task, so it stays here)
+
+                # Begin to convert Keypoint Objects into (x,y) coordinate arrays
+                # cv.findHomography needs these coordinate arrays
+
+                #Extract location of good matches in both images
+                src_pts = np.float32([kp1[m.queryIdx].pt for m in good_matches]).reshape(-1, 1, 2)
+                dst_pts = np.float32([kp2[m.trainIdx].pt for m in good_matches]).reshape(-1, 1, 2)
+
+                #run RANSAC (Geometric Verification)
+                M, mask = cv.findHomography(src_pts, dst_pts, cv.RANSAC, 5.0)
+                matchesMask = mask.ravel().tolist()
+                #Conversion Over
+
+                inlier_count = np.sum(matchesMask)
+
+                if inlier_count >= MIN_MATCH_COUNT:
+                    print(f"Confirmed Match: {name1} ↔ {name2} ({inlier_count} geometric matches)")
+
+                # Logic to draw matches
+
+                draw_params = dict(matchColor=(0, 255, 0),
+                                   singlePointColor = None,
+                                   matchesMask=matchesMask,
+                                   flags=2)
+
                 matched_img = cv.drawMatches(img1, kp1, img2, kp2, good_matches, None,
-                                             flags=cv.DrawMatchesFlags_NOT_DRAW_SINGLE_POINTS)
+                                             **draw_params)
 
                 plt.figure(figsize=(12, 6))
                 plt.imshow(matched_img)
-                plt.title(f"{name1} ↔ {name2} | Matches: {len(good_matches)}")
-                plt.show()  # plt.show() is OK here, this is the GUI!
+                plt.title(f"{name1} ↔ {name2} | Geometric Matches: {inlier_count}")
+                plt.show()
             else:
-                print(f"Skipped: {name1} ↔ {name2} | Only {len(good_matches)} good matches")
+                print(f"Skipped: {name1} ↔ {name2} | Only {inlier_count} good inliers")
+        else:
+            print(f"Skipped: {name1} ↔ {name2} | Only {len(good_matches)} raw matches")
+
 
 def gui_command_train_vocab():
     print("Training new vocabulary")
