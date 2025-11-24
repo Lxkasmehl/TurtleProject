@@ -5,7 +5,7 @@ url = 'http://127.0.0.1:8000/api/identify/'
 
 # Path to the image you want to identify
 # CHANGE THIS to a real path on your computer!
-image_path = 'images/mistorbeast.png'
+image_path = 'images/pans.jpg'
 
 try:
     # Open the image in binary mode
