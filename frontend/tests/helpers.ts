@@ -20,39 +20,59 @@ export const navigateUsingNav = async (page: Page, pageName: string) => {
 };
 
 /**
- * Helper function to login as admin and navigate to home using navigation
+ * Helper function to login as admin using real authentication
+ * Uses environment variables for test credentials:
+ * - E2E_ADMIN_EMAIL (default: admin@test.com)
+ * - E2E_ADMIN_PASSWORD (default: testpassword123)
  */
 export const loginAsAdmin = async (page: Page) => {
+  const adminEmail = process.env.E2E_ADMIN_EMAIL || 'admin@test.com';
+  const adminPassword = process.env.E2E_ADMIN_PASSWORD || 'testpassword123';
+
   // Navigate to login page
   await page.goto('/login');
 
-  // Click Admin button to switch to admin role
-  // Note: Admin button is on the page itself, not in mobile menu
-  await page.getByRole('button', { name: 'Admin' }).click();
+  // Fill in email and password
+  await page.getByLabel('Email').fill(adminEmail);
+  await page.getByLabel('Password').fill(adminPassword);
 
-  // Verify admin role is set
-  await expect(page.getByText('Current view: admin')).toBeVisible();
+  // Submit the form
+  await page.getByRole('button', { name: 'Sign In' }).click();
 
-  // Navigate to home using navigation (preserves state)
-  await navigateUsingNav(page, 'Home');
+  // Wait for successful login - check for navigation to home page or success notification
+  await page.waitForURL('/', { timeout: 10000 });
+
+  // Verify we're logged in as admin by checking the role badge
+  const badge = page.getByTestId('role-badge');
+  await expect(badge).toHaveText(/Admin/);
 };
 
 /**
- * Helper function to login as community member and navigate to home using navigation
+ * Helper function to login as community member using real authentication
+ * Uses environment variables for test credentials:
+ * - E2E_COMMUNITY_EMAIL (default: community@test.com)
+ * - E2E_COMMUNITY_PASSWORD (default: testpassword123)
  */
 export const loginAsCommunity = async (page: Page) => {
+  const communityEmail = process.env.E2E_COMMUNITY_EMAIL || 'community@test.com';
+  const communityPassword = process.env.E2E_COMMUNITY_PASSWORD || 'testpassword123';
+
   // Navigate to login page
   await page.goto('/login');
 
-  // Click Community Member button to switch to community role
-  // Note: Community Member button is on the page itself, not in mobile menu
-  await page.getByRole('button', { name: 'Community Member' }).click();
+  // Fill in email and password
+  await page.getByLabel('Email').fill(communityEmail);
+  await page.getByLabel('Password').fill(communityPassword);
 
-  // Verify community role is set
-  await expect(page.getByText('Current view: community')).toBeVisible();
+  // Submit the form
+  await page.getByRole('button', { name: 'Sign In' }).click();
 
-  // Navigate to home using navigation (preserves state)
-  await navigateUsingNav(page, 'Home');
+  // Wait for successful login - check for navigation to home page or success notification
+  await page.waitForURL('/', { timeout: 10000 });
+
+  // Verify we're logged in as community by checking the role badge
+  const badge = page.getByTestId('role-badge');
+  await expect(badge).toHaveText(/Community/);
 };
 
 /**
