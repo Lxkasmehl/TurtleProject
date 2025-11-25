@@ -1,44 +1,35 @@
 from django.contrib import admin
-from django.utils.html import mark_safe
 from .models import Turtle, TurtleImage
 
 
-class TurtleImageInline(admin.StackedInline):
+class TurtleImageInline(admin.TabularInline):
     model = TurtleImage
-    extra = 0  # Don't show extra empty slots by default
-
-    # Fields to show for each image
-    fields = ('image', 'image_preview', 'mirror_image', 'mirror_image_preview',
-              'is_processed', 'vlad_blob_original', 'vlad_blob_mirror', 'created_at')
-
-    # Protect calculated fields
-    readonly_fields = ('image_preview', 'mirror_image_preview',
-                       'vlad_blob_original', 'vlad_blob_mirror', 'created_at')
-
-    # Helper to preview the image
-    def image_preview(self, obj):
-        if obj.image:
-            return mark_safe(f'<img src="{obj.image.url}" style="height: 100px; border-radius: 5px;" />')
-        return "No Image"
-
-    image_preview.short_description = "Image Preview"
-
-    def mirror_image_preview(self, obj):
-        if obj.mirror_image:
-            return mark_safe(f'<img src="{obj.mirror_image.url}" style="height: 100px; border-radius: 5px;" />')
-        return "No Mirror"
-
-    mirror_image_preview.short_description = "Mirror Preview"
+    extra = 0
+    readonly_fields = ('created_at',)
 
 
+@admin.register(Turtle)
 class TurtleAdmin(admin.ModelAdmin):
-    # 'biology_id' replaces the old 'turtle_id'
-    list_display = ('id', 'biology_id', 'name', 'created_at')
+    # Updated list_display to use valid fields/properties
+    list_display = ('id', 'get_biology_id', 'gender', 'location_specific', 'location_state', 'created_at')
 
-    search_fields = ('biology_id', 'name', 'id')
+    # Updated search fields
+    search_fields = ('id', 'location_specific', 'location_state')
 
-    # This adds the images section inside the Turtle page
+    # Updated filters
+    list_filter = ('gender', 'location_state', 'created_at')
+
     inlines = [TurtleImageInline]
 
+    # Helper to display the biology_id property in the admin list
+    def get_biology_id(self, obj):
+        return obj.biology_id
 
-admin.site.register(Turtle, TurtleAdmin)
+    get_biology_id.short_description = 'Biology ID'
+
+
+@admin.register(TurtleImage)
+class TurtleImageAdmin(admin.ModelAdmin):
+    list_display = ('id', 'turtle', 'is_processed', 'created_at')
+    list_filter = ('is_processed', 'created_at')
+    readonly_fields = ('vlad_blob_original', 'vlad_blob_mirror', 'created_at')
