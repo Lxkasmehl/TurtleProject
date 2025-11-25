@@ -2,14 +2,17 @@ import { test, expect } from '@playwright/test';
 import { openMobileMenuIfPresent, loginAsAdmin, loginAsCommunity } from '../helpers';
 
 test.describe('Admin Navigation Tests', () => {
-  test('should show Turtle Records link only for admin users', async ({ page }) => {
-    await page.goto('/');
+  test.beforeEach(async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 720 });
+  });
 
-    // Initially as community - should not see Turtle Records link
+  test('should show Turtle Records link only for admin users', async ({ page }) => {
+    // Start logged out - default role is community, should not see Turtle Records link
+    await page.goto('/');
     await openMobileMenuIfPresent(page);
     await expect(page.getByRole('button', { name: 'Turtle Records' })).not.toBeVisible();
 
-    // Switch to admin (this navigates to home using navigation)
+    // Log in as admin
     await loginAsAdmin(page);
 
     // Should now see Turtle Records link
@@ -42,9 +45,6 @@ test.describe('Admin Navigation Tests', () => {
   test('should show Turtle Records link in desktop navigation for admin', async ({
     page,
   }) => {
-    // Set desktop viewport first
-    await page.setViewportSize({ width: 1280, height: 720 });
-
     await loginAsAdmin(page);
 
     // Should see Turtle Records in desktop navigation
