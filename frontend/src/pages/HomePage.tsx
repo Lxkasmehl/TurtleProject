@@ -1,15 +1,18 @@
-import { Container, Paper, Title, Text, Group, Stack, Center } from '@mantine/core';
+import { Container, Paper, Title, Text, Group, Stack, Center, Button } from '@mantine/core';
 import { Dropzone } from '@mantine/dropzone';
 import type { FileRejection, FileWithPath } from '@mantine/dropzone';
 import { notifications } from '@mantine/notifications';
-import { IconUpload, IconX, IconPhoto, IconAlertCircle } from '@tabler/icons-react';
+import { IconUpload, IconX, IconPhoto, IconAlertCircle, IconInfoCircle } from '@tabler/icons-react';
+import { useState } from 'react';
 import { validateFile } from '../services/mockBackend';
 import { useUser } from '../hooks/useUser';
 import { usePhotoUpload } from '../hooks/usePhotoUpload';
 import { PreviewCard } from '../components/PreviewCard';
+import { InstructionsModal } from '../components/InstructionsModal';
 
 export default function HomePage() {
   const { role } = useUser();
+  const [instructionsOpened, setInstructionsOpened] = useState(false);
 
   const {
     files,
@@ -69,8 +72,21 @@ export default function HomePage() {
       <Paper shadow='sm' p='xl' radius='md' withBorder>
         <Stack gap='lg'>
           <Center>
-            <Stack gap='xs' align='center'>
-              <Title order={1}>Photo Upload</Title>
+            <Stack gap='xs' align='center' style={{ width: '100%' }}>
+              <Group justify='space-between' style={{ width: '100%' }}>
+                <div style={{ flex: 1 }} /> {/* Spacer for centering */}
+                <Title order={1}>Photo Upload</Title>
+                <Group style={{ flex: 1 }} justify='flex-end'>
+                  <Button
+                    variant='light'
+                    size='sm'
+                    leftSection={<IconInfoCircle size={16} />}
+                    onClick={() => setInstructionsOpened(true)}
+                  >
+                    View Instructions
+                  </Button>
+                </Group>
+              </Group>
               <Text size='sm' c='dimmed' ta='center'>
                 Upload a photo to save it in the backend
               </Text>
@@ -132,6 +148,11 @@ export default function HomePage() {
           />
         </Stack>
       </Paper>
+
+      <InstructionsModal 
+        opened={instructionsOpened} 
+        onClose={() => setInstructionsOpened(false)} 
+      />
     </Container>
   );
 }
