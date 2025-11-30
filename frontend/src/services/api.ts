@@ -2,7 +2,29 @@
  * API Service for backend communication
  */
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001/api';
+// Determine API URL based on environment
+// If accessing via tunnel (loca.lt), use relative path or same origin
+// Otherwise use localhost or configured URL
+const getApiBaseUrl = (): string => {
+  // Use environment variable if set
+  if (import.meta.env.VITE_API_URL) {
+    return import.meta.env.VITE_API_URL;
+  }
+
+  // If accessing via tunnel, we need to proxy through the tunnel
+  // For now, use localhost (backend would need its own tunnel)
+  // Or use relative path if backend is on same origin
+  if (window.location.hostname.includes('loca.lt')) {
+    // Backend would need its own tunnel, for now fallback to localhost
+    // This means API calls won't work over tunnel, but UI will load
+    return 'http://localhost:3001/api';
+  }
+
+  // Default to localhost for local development
+  return 'http://localhost:3001/api';
+};
+
+const API_BASE_URL = getApiBaseUrl();
 
 export interface User {
   id: number;
@@ -50,9 +72,9 @@ export const apiRequest = async (
   options: RequestInit = {}
 ): Promise<Response> => {
   const token = getToken();
-  const headers: HeadersInit = {
+  const headers: Record<string, string> = {
     'Content-Type': 'application/json',
-    ...options.headers,
+    ...(options.headers as Record<string, string>),
   };
 
   if (token) {
@@ -61,16 +83,14 @@ export const apiRequest = async (
 
   const response = await fetch(`${API_BASE_URL}${endpoint}`, {
     ...options,
-    headers,
+    headers: headers as HeadersInit,
   });
 
   return response;
 };
 
 // Register new user
-export const register = async (
-  data: RegisterRequest
-): Promise<AuthResponse> => {
+export const register = async (data: RegisterRequest): Promise<AuthResponse> => {
   const response = await apiRequest('/auth/register', {
     method: 'POST',
     body: JSON.stringify(data),
@@ -187,4 +207,3 @@ export const promoteToAdmin = async (email: string): Promise<PromoteToAdminRespo
 
   return await response.json();
 };
-
