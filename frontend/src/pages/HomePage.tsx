@@ -3,7 +3,7 @@ import { Dropzone } from '@mantine/dropzone';
 import type { FileRejection, FileWithPath } from '@mantine/dropzone';
 import { notifications } from '@mantine/notifications';
 import { IconUpload, IconX, IconPhoto, IconAlertCircle, IconInfoCircle } from '@tabler/icons-react';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { validateFile } from '../services/mockBackend';
 import { useUser } from '../hooks/useUser';
 import { usePhotoUpload } from '../hooks/usePhotoUpload';
@@ -13,6 +13,14 @@ import { InstructionsModal } from '../components/InstructionsModal';
 export default function HomePage() {
   const { role } = useUser();
   const [instructionsOpened, setInstructionsOpened] = useState(false);
+
+  // Auto-open instructions on first visit
+  useEffect(() => {
+    const hasSeenInstructions = localStorage.getItem('hasSeenInstructions');
+    if (!hasSeenInstructions) {
+      setInstructionsOpened(true);
+    }
+  }, []);
 
   const {
     files,
