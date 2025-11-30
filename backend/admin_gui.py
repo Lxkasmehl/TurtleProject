@@ -1,230 +1,212 @@
 import os
 import tkinter as tk
+from tkinter import filedialog, messagebox, ttk
+from PIL import Image, ImageTk  # Requires: pip install pillow
 import cv2 as cv
-from tkinter import Tk, filedialog, Label
-import matplotlib.pyplot as plt
-import plotly.express as px
-import pandas as pd
-import numpy as np
-import image_processing
+from turtle_manager import TurtleManager
 
-# This is the "database" of SIFT features
-SIFT_RESULT_PATH = "../../../Fall 2025/SIFT RESULTS/"
-# This is the saved k-means model
-VOCABULARY_PATH = os.path.join(SIFT_RESULT_PATH, "_vocabulary.pkl")
+# Initialize Manager
+manager = TurtleManager()
 
 
-def select_images():
-    root = tk.Tk()
-    root.title("Select Images")
-    root.withdraw()
-    file_paths = filedialog.askopenfilenames(
-        initialdir=os.path.expanduser("~"),
-        title="Select an Image File",
-        filetypes=(
-            ("Image files", "*.jpg;*.jpeg;*.png;*.bmp;*.tif;*.tiff"),
-            ("All files", "*.*")
+class IdentifyWindow:
+    """
+    A popup window to Upload -> Search -> Select Match
+    """
+
+    def __init__(self, master):
+        self.top = tk.Toplevel(master)
+        self.top.title("Identify & Add Observation")
+        self.top.geometry("1600x1000")
+
+        self.query_path = None
+        self.results = []
+
+        # --- LEFT PANEL: UPLOAD ---
+        frame_left = tk.Frame(self.top, width=350, bg="#ecf0f1")
+        frame_left.pack(side="left", fill="y", padx=10, pady=10)
+
+        tk.Label(frame_left, text="Query Image", font=("Arial", 12, "bold"), bg="#ecf0f1").pack(pady=10)
+
+        self.lbl_query_img = tk.Label(frame_left, bg="#bdc3c7", text="No Image")
+        self.lbl_query_img.pack(pady=10)
+
+        btn_browse = tk.Button(frame_left, text="1. Select Image", command=self.browse_image, bg="#3498db", fg="white")
+        btn_browse.pack(fill="x", pady=5)
+
+        btn_search = tk.Button(frame_left, text="2. Search Database", command=self.run_search, bg="#e67e22", fg="white")
+        btn_search.pack(fill="x", pady=5)
+
+        # --- RIGHT PANEL: RESULTS ---
+        self.frame_results = tk.Frame(self.top)
+        self.frame_results.pack(side="right", fill="both", expand=True, padx=10, pady=10)
+
+        tk.Label(self.frame_results, text="Top Matches (Select One)", font=("Arial", 12, "bold")).pack(pady=10)
+
+        # Scrollable area for matches
+        canvas = tk.Canvas(self.frame_results)
+        scrollbar = tk.Scrollbar(self.frame_results, orient="vertical", command=canvas.yview)
+        self.scrollable_frame = tk.Frame(canvas)
+
+        self.scrollable_frame.bind(
+            "<Configure>",
+            lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
         )
-    )
-    root.update()
-    root.destroy()
-    return list(file_paths) if file_paths else []
 
-def select_npz_files():
-    root = Tk()
-    root.title("Select NPZ Files")
-    root.withdraw()
-    file_paths = filedialog.askopenfilenames(
-        title="Select NPZ Files",
-        filetypes=[("Numpy Files", "*.npz")]
-    )
-    root.update()
-    root.destroy()
-    return list(file_paths)
+        canvas.create_window((0, 0), window=self.scrollable_frame, anchor="nw")
+        canvas.configure(yscrollcommand=scrollbar.set)
 
+        canvas.pack(side="left", fill="both", expand=True)
+        scrollbar.pack(side="right", fill="y")
 
-def gui_command_SIFT():
-    print("Select images to process...")
-    image_paths = select_images()
-    if not image_paths:
-        print("No images selected.")
-        return
+    def browse_image(self):
+        path = filedialog.askopenfilename(filetypes=[("Images", "*.jpg *.png *.jpeg")])
+        if path:
+            self.query_path = path
+            self.show_image(path, self.lbl_query_img, size=(300, 300))
 
-    processed_count = 0
-    for image_path in image_paths:
-        # Create a random name for the output file
-        filename_base = os.path.splitext(os.path.basename(image_path))[0]
-        x = np.random.randint(100000, 999999)  # Your random name logic
-        output_filename = f"{filename_base}_{x}.npz"
-        output_path = os.path.join(SIFT_RESULT_PATH, output_filename)
+    def show_image(self, path, label_widget, size=(300, 300)):
+        # Helper to display image on Tkinter Label
+        try:
+            img = Image.open(path)
+            img.thumbnail(size)
+            img_tk = ImageTk.PhotoImage(img)
+            label_widget.config(image=img_tk, text="")
+            label_widget.image = img_tk  # Keep reference
+        except Exception as e:
+            print(f"Error loading image {path}: {e}")
 
-        print(f"Processing {image_path} -> {output_filename}...")
+    def run_search(self):
+        if not self.query_path: return
 
-        # Calling the engine
-        success, _ = image_processing.process_image_through_SIFT(image_path, output_path)
+        # Clear previous results
+        for widget in self.scrollable_frame.winfo_children():
+            widget.destroy()
 
-        if success:
-            processed_count += 1
+        # CALL BACKEND
+        results = manager.search_for_matches(self.query_path)
 
-    print(f"All Done. Processed {processed_count}/{len(image_paths)} images.")
+        if not results:
+            tk.Label(self.scrollable_frame, text="No matches found.").pack()
+            return
 
+        # Display Results
+        for i, res in enumerate(results):
+            self.create_match_card(res, i + 1)
 
-def gui_command_match_SIFT():
-    print("Select 2 or more .npz files to match...")
-    file_paths = select_npz_files()
-    if len(file_paths) < 2:
-        print("Select at least 2 .npz files.")
-        return
+    def create_match_card(self, result, rank):
+        frame_card = tk.Frame(self.scrollable_frame, bd=2, relief="groove", padx=10, pady=10)
+        frame_card.pack(fill="x", pady=5)
 
-    MIN_MATCH_COUNT = 10
-    bf = cv.BFMatcher()  # The matcher object
+        # 1. Match Info (Left Side - Fixed)
+        score = result.get('distance', 0)
+        tid = result.get('site_id', 'Unknown')
+        loc = result.get('location', 'Unknown')
 
-    # Load all the data first
-    sift_data = {}
-    for path in file_paths:
-        img, kp, des, name = image_processing.SIFT_from_file(path)
-        if des is not None:
-            sift_data[name] = (img, kp, des)
+        info_text = f"Rank {rank}\nID: {tid}\nLoc: {loc}\nDist: {score:.4f}"
+        # Added fill='y' so the label stays centered vertically if the card gets tall
+        tk.Label(frame_card, text=info_text, justify="left", font=("Arial", 11, "bold"), width=15).pack(side="left",
+                                                                                                        fill="y",
+                                                                                                        padx=5)
 
-    names = list(sift_data.keys())
+        # 3. Action Button (Right Side - Fixed)
+        # We pack this BEFORE the image so it sticks to the right edge
+        btn_confirm = tk.Button(frame_card, text="✅ Match",
+                                command=lambda r=result: self.confirm_match(r),
+                                bg="#2ecc71", fg="white", font=("Arial", 14, "bold"), height=2)
+        btn_confirm.pack(side="right", padx=20)
 
-    # Pairwise Matching
-    for i in range(len(names)):
-        for j in range(i + 1, len(names)):
-            name1 = names[i]
-            name2 = names[j]
+        # 2. Image Preview (Middle - Expands)
+        # Removed fixed width/height request so it flexes
+        lbl_img = tk.Label(frame_card, text="Image not found", bg="#dadada")
 
-            img1, kp1, des1 = sift_data[name1]
-            img2, kp2, des2 = sift_data[name2]
+        # PACK CHANGE: expand=True makes it claim all empty space between Info and Button
+        lbl_img.pack(side="left", expand=True, fill="both", padx=10)
 
-            #Initial Match
-            matches = bf.knnMatch(des1, des2, k=2)
+        img_path = result.get('file_path')
+        if img_path and os.path.exists(img_path):
+            base = os.path.splitext(img_path)[0]
+            found = False
+            for ext in ['.jpg', '.jpeg', '.png']:
+                if os.path.exists(base + ext):
+                    # SIZE CHANGE: Increased limit to (1200, 850)
+                    # This allows wide images to stretch almost the full width of your 1600px window
+                    self.show_image(base + ext, lbl_img, size=(500, 350))
+                    found = True
+                    break
+            if not found: lbl_img.config(text="JPG Missing")
 
-            good_matches = []
-            for m, n in matches:
-                if m.distance < 0.70 * n.distance:
-                    good_matches.append(m)
+    def confirm_match(self, result):
+        turtle_id = result.get('site_id')
+        location = result.get('location')
 
-            if len(good_matches) >= MIN_MATCH_COUNT:
-
-                # Begin to convert Keypoint Objects into (x,y) coordinate arrays
-                # cv.findHomography needs these coordinate arrays
-
-                #Extract location of good matches in both images
-                src_pts = np.float32([kp1[m.queryIdx].pt for m in good_matches]).reshape(-1, 1, 2)
-                dst_pts = np.float32([kp2[m.trainIdx].pt for m in good_matches]).reshape(-1, 1, 2)
-
-                #run RANSAC (Geometric Verification)
-                M, mask = cv.findHomography(src_pts, dst_pts, cv.RANSAC, 5.0)
-                matchesMask = mask.ravel().tolist()
-                #Conversion Over
-
-                inlier_count = np.sum(matchesMask)
-
-                if inlier_count >= MIN_MATCH_COUNT:
-                    print(f"Confirmed Match: {name1} ↔ {name2} ({inlier_count} geometric matches)")
-
-                # Logic to draw matches
-
-                draw_params = dict(matchColor=(0, 255, 0),
-                                   singlePointColor = None,
-                                   matchesMask=matchesMask,
-                                   flags=2)
-
-                matched_img = cv.drawMatches(img1, kp1, img2, kp2, good_matches, None,
-                                             **draw_params)
-
-                plt.figure(figsize=(12, 6))
-                plt.imshow(matched_img)
-                plt.title(f"{name1} ↔ {name2} | Geometric Matches: {inlier_count}")
-                plt.show()
+        if messagebox.askyesno("Confirm", f"Add this image to Turtle {turtle_id}?"):
+            success, msg = manager.add_observation_to_turtle(self.query_path, turtle_id, location)
+            if success:
+                messagebox.showinfo("Success", f"Image saved to {msg}")
+                self.top.destroy()
             else:
-                print(f"Skipped: {name1} ↔ {name2} | Only {inlier_count} good inliers")
-        else:
-            print(f"Skipped: {name1} ↔ {name2} | Only {len(good_matches)} raw matches")
+                messagebox.showerror("Error", msg)
 
 
-def gui_command_train_vocab():
-    print("Training new vocabulary")
-    kmeans = image_processing.train_and_save_vocabulary(npz_path=SIFT_RESULT_PATH, vocab_output_path=VOCABULARY_PATH, num_clusters=64)
-    if kmeans is not None:
-        print("Vocabulary training complete")
-    else:
-        print("Vocabulary training failed")
+class AdminDashboard:
+    def __init__(self, root):
+        self.root = root
+        self.root.title("🐢 Turtle Project Admin Dashboard")
+        self.root.geometry("600x500")
+        self.root.configure(bg="#f0f0f0")
+
+        # --- HEADER ---
+        header = tk.Label(root, text="Turtle ID System", font=("Arial", 18, "bold"), bg="#f0f0f0", fg="#2c3e50")
+        header.pack(pady=20)
+
+        # --- FRAME: ACTIONS ---
+        frame_actions = tk.LabelFrame(root, text="Actions", font=("Arial", 10, "bold"), bg="white", padx=10, pady=10)
+        frame_actions.pack(fill="both", expand=True, padx=20, pady=10)
+
+        # 1. Bulk Ingest
+        btn_bulk = tk.Button(frame_actions, text="📂 Bulk Ingest (Flash Drive)",
+                             command=self.command_bulk_ingest,
+                             bg="#3498db", fg="white", font=("Arial", 11), height=2)
+        btn_bulk.pack(fill="x", pady=5)
+
+        # 2. Identify (The New Feature)
+        btn_identify = tk.Button(frame_actions, text="🔍 Identify & Add Observation",
+                                 command=self.open_identify_window,
+                                 bg="#9b59b6", fg="white", font=("Arial", 11), height=2)
+        btn_identify.pack(fill="x", pady=5)
+
+        # 3. Manual Upload (New Turtle)
+        btn_manual = tk.Button(frame_actions, text="➕ Manual Upload (New Turtle)",
+                               command=self.open_manual_upload_window,
+                               bg="#2ecc71", fg="white", font=("Arial", 11), height=2)
+        btn_manual.pack(fill="x", pady=5)
+
+        # --- STATUS ---
+        self.status_var = tk.StringVar()
+        self.status_var.set("System Ready")
+        tk.Label(root, textvariable=self.status_var, bd=1, relief=tk.SUNKEN, anchor=tk.W).pack(side=tk.BOTTOM,
+                                                                                               fill=tk.X)
+
+    def command_bulk_ingest(self):
+        drive_path = filedialog.askdirectory(title="Select Flash Drive Root")
+        if drive_path:
+            self.status_var.set("Ingesting...")
+            self.root.update()
+            manager.ingest_flash_drive(drive_path)
+            messagebox.showinfo("Done", "Ingest Complete")
+            self.status_var.set("Ready")
+
+    def open_identify_window(self):
+        """Opens the new Search Window"""
+        IdentifyWindow(self.root)
+
+    def open_manual_upload_window(self):
+        # (The manual upload logic you already have goes here)
+        pass
 
 
-def gui_command_plot_clusters(use_plotly=False):
-    #Command for both "PCA" and "Plotly" buttons.
-    # Step 1: Load the trained k-means model
-    kmeans = image_processing.load_vocabulary(VOCABULARY_PATH)
-    if kmeans is None:
-        print("Vocabulary not found. Please train it first.")
-        return
-
-    # Step 2: Get VLAD vectors for all files
-    print("Computing VLAD vectors for all files...")
-    labels, vectors = image_processing.get_vlad_vectors(SIFT_RESULT_PATH, kmeans)
-    if vectors.shape[0] == 0:
-        print("No VLAD vectors could be computed.")
-        return
-
-    # Step 3: Reduce vectors with PCA
-    print("Reducing vectors with PCA...")
-    reduced = image_processing.reduce_with_pca(vectors, n_components=2)
-    if reduced is None:
-        print("PCA failed.")
-        return
-
-    # Step 4: Plot
-    df = pd.DataFrame(reduced, columns=["x", "y"])
-    df["label"] = labels
-
-    if use_plotly:
-        print("Displaying Plotly chart...")
-        fig = px.scatter(df, x="x", y="y", text="label", title="Turtle Cluster Map (Plotly)")
-        fig.update_traces(textposition='top center')
-        fig.show()
-    else:
-        print("Displaying Matplotlib chart...")
-        plt.figure(figsize=(10, 6))
-        plt.scatter(df["x"], df["y"])
-        for i, label in enumerate(df["label"]):
-            plt.annotate(label, (df["x"][i], df["y"][i]))
-        plt.title("Turtle Cluster Map (Matplotlib/PCA)")
-        plt.show()
-
-
-
-
-
-def main():
-    root = Tk()
-    root.title("Turtle CV Admin Console")
-
-    frame1 = tk.Frame(root, width=200, height=200, bg="white")
-    frame1.pack(fill='both', expand=True)
-
-    btn_sift = tk.Button(frame1, text="Process New Images (SIFT)", command=gui_command_SIFT)
-    btn_sift.pack(pady=10)
-
-    btn_match = tk.Button(frame1, text="Match SIFT Files (Pairwise)", command=gui_command_match_SIFT)
-    btn_match.pack(pady=10)
-
-    btn_train = tk.Button(frame1, text="** TRAIN VOCABULARY **", command=gui_command_train_vocab)
-    btn_train.pack(pady=10)
-
-    btn_plotly = tk.Button(frame1, text="Plotly Turtle Clusters",
-                           command=lambda: gui_command_plot_clusters(use_plotly=True))
-    btn_plotly.pack(pady=10)
-
-    btn_pca = tk.Button(frame1, text="PCA Turtle Clusters (Matplotlib)",
-                        command=lambda: gui_command_plot_clusters(use_plotly=False))
-    btn_pca.pack(pady=10)
-
+if __name__ == "__main__":
+    root = tk.Tk()
+    app = AdminDashboard(root)
     root.mainloop()
-
-
-if __name__ == '__main__':
-    # Ensure the SIFT RESULTS directory exists
-    os.makedirs(SIFT_RESULT_PATH, exist_ok=True)
-    main()

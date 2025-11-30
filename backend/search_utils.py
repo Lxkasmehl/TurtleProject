@@ -3,6 +3,7 @@ from scipy.spatial.distance import cdist
 from sklearn.cluster import DBSCAN
 from sklearn.neighbors import NearestNeighbors
 from typing import Tuple, List, Optional
+import faiss
 
 def run_initial_dbscan(vlad_vectors: np.ndarray, eps: float, min_samples: int) -> np.ndarray:
     """
@@ -29,6 +30,79 @@ def run_initial_dbscan(vlad_vectors: np.ndarray, eps: float, min_samples: int) -
     print(f"DBSCAN complete.  Found {n_sites} sites with {n_noise} noise.")
     return labels
 
+
+# --- 2. Global Search (FAISS HNSW) ---
+
+def add_new_turtle_image_to_index(faiss_index: 'faiss.Index', new_vlad_vector: np.ndarray) -> bool:
+    """
+    Adds a new VLAD vector (representing a new or verified turtle) to the live FAISS index.
+    This function is called by register_new_turtle (or similar confirmation endpoint).
+    """
+    if new_vlad_vector.ndim == 1:
+        # Ensure it's a 2D array (1, D) as FAISS expects this format
+        new_vlad_vector = new_vlad_vector.reshape(1, -1)
+
+    distances, indices = faiss_search_k_neighbors(faiss_index, new_vlad_vector, k=1)
+        # If the distance to the closest match is near zero (e.g., < 1e-9), it is a duplicate.
+    if indices.size > 0 and distances[0] < 1e-9:
+        print("WARNING: Identical or near-duplicate vector detected. Skipping addition to FAISS.")
+        return False
+
+    # FAISS requires float32 and C-contiguous arrays
+    vector_to_add = np.ascontiguousarray(new_vlad_vector.astype('float32'))
+
+    # The IndexHNSWFlat index supports the .add() method natively
+    faiss_index.add(vector_to_add)
+    print(f"FAISS index updated. Total vectors: {faiss_index.ntotal}")
+    return True
+
+
+def initialize_faiss_index(database_vectors: np.ndarray) -> 'faiss.Index':
+    database_vectors = np.ascontiguousarray(database_vectors.astype('float32'))
+    dim = database_vectors.shape[1]
+    # HNSW parameters for speed/accuracy balance
+    M = 32
+    index = faiss.IndexHNSWFlat(dim, M, faiss.METRIC_L2)
+    index.hnsw.efConstruction = 80
+
+    index.add(database_vectors)
+    print(f"FAISS HNSW Index created with {index.ntotal} vectors.")
+    return index
+
+
+def faiss_search_k_neighbors(faiss_index: 'faiss.Index', query_vector: np.ndarray, k: int = 5) -> Tuple[
+    np.ndarray, np.ndarray]:
+    query_vector = np.ascontiguousarray(query_vector.reshape(1, -1).astype('float32'))
+    if hasattr(faiss_index, 'hnsw'):
+        faiss_index.hnsw.efSearch = 64
+    distances, indices = faiss_index.search(query_vector, k)
+    return distances.flatten(), indices.flatten()
+
+
+# --- 3. Filtered Search (Location Specific) ---
+def filtered_faiss_search(query_vector: np.ndarray, subset_vectors: np.ndarray,
+                          subset_indices: np.ndarray, n_results: int = 5) -> Tuple[List[int], np.ndarray]:
+    if subset_vectors.shape[0] == 0: return [], np.array([])
+
+    subset_vectors = np.ascontiguousarray(subset_vectors.astype('float32'))
+    dim = subset_vectors.shape[1]
+    local_index = faiss.IndexFlatL2(dim)
+    local_index.add(subset_vectors)
+
+    distances, indices_in_subset = faiss_search_k_neighbors(local_index, query_vector, k=n_results)
+
+    # Filter query itself if present
+    is_query = distances < 1e-6
+    filtered_indices = indices_in_subset[~is_query]
+    filtered_dists = distances[~is_query]
+
+    global_indices = subset_indices[filtered_indices]
+    return global_indices.tolist(), filtered_dists
+
+
+
+
+"""
 def initialize_neighbor_search(database_vectors: np.ndarray) -> NearestNeighbors:
     # Use brute-force for simplicity or 'auto' for efficiency on large datasets.
     # We fit it to the entire database of VLAD vectors once.
@@ -59,7 +133,8 @@ def find_neighbors_in_radius(nn_model: NearestNeighbors, query_vector: np.ndarra
     top_distances = valid_distances[:n_results]
 
     return top_indices.tolist(), top_distances
-
+"""
+"""
 def brute_force_filtered_search(query_vector: np.ndarray, subset_vectors: np.ndarray,
                                 subset_indices: np.ndarray, n_results: int = 5) -> Tuple[List[int], np.ndarray]:
     if subset_vectors.shape[0] == 0:
@@ -83,3 +158,4 @@ def brute_force_filtered_search(query_vector: np.ndarray, subset_vectors: np.nda
     top_distances = distances[top_n_subset_indices]
 
     return global_indices.tolist(), top_distances
+"""
