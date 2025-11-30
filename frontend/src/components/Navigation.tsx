@@ -11,6 +11,7 @@ import {
   useMantineColorScheme,
   ActionIcon,
   Badge,
+  Box,
 } from '@mantine/core';
 import { useDisclosure, useMediaQuery } from '@mantine/hooks';
 import { useMemo } from 'react';
@@ -69,32 +70,16 @@ export default function Navigation({ children }: NavigationProps) {
   };
 
   // Calculate dynamic breakpoint based on navbar content
-  // Admin view has more items, long usernames take more space
-  // Higher breakpoint = drawer appears earlier (at larger screen width)
   const dynamicBreakpoint = useMemo(() => {
-    const baseBreakpoint = 1000; // Base breakpoint for customer view with normal name
-
-    // Calculate item count based on role
-    const itemCount = role === 'admin' ? 5 : 3; // Admin has 2 extra items
-
-    // Admin has 2 extra items, increase breakpoint by ~167px per extra item
-    // This makes drawer appear earlier when there are more nav items
-    // Target: Admin with normal name should be around 1000 + 333 = 1333px
+    const baseBreakpoint = 1000;
+    const itemCount = role === 'admin' ? 5 : 3;
     const itemAdjustment = (itemCount - 3) * 167;
-
-    // Long usernames/emails take more space
     const userName = user?.name || user?.email || '';
     const userNameLength = userName.length;
-    // Increase breakpoint by ~11px per character over 15 characters
-    // This makes drawer appear earlier when username is long
     const userNameAdjustment = Math.max(0, (userNameLength - 15) * 11);
-
-    // Calculate final breakpoint (higher = drawer appears at larger screen width)
     return baseBreakpoint + itemAdjustment + userNameAdjustment;
   }, [role, user?.name, user?.email]);
 
-  // Use dynamic breakpoint to show drawer when there's not enough space
-  // This skips the icon-only step and goes directly to drawer
   const showDrawer = useMediaQuery(`(max-width: ${dynamicBreakpoint}px)`);
 
   const handleNavigation = (path: string) => {
@@ -115,7 +100,6 @@ export default function Navigation({ children }: NavigationProps) {
       close();
     } catch (error) {
       console.error('Logout error:', error);
-      // Still logout locally even if API call fails
       setUserLogout();
       navigate('/');
       close();
@@ -134,18 +118,32 @@ export default function Navigation({ children }: NavigationProps) {
       leftSection={<item.icon size={16} />}
       onClick={() => handleNavigation(item.path)}
       color={
-        location.pathname === item.path ? (role === 'admin' ? 'red' : 'blue') : undefined
+        location.pathname === item.path ? (role === 'admin' ? 'orange' : 'teal') : undefined
       }
       data-active={location.pathname === item.path ? 'true' : 'false'}
-      style={{
-        backgroundColor:
-          location.pathname === item.path
-            ? role === 'admin'
-              ? theme.colors.red[6]
-              : theme.colors.blue[6]
-            : 'transparent',
-        color: location.pathname === item.path ? 'white' : undefined,
-        transition: 'all 0.2s ease',
+      styles={{
+        root: {
+          backgroundColor:
+            location.pathname === item.path
+              ? role === 'admin'
+                ? theme.colors.orange[6]
+                : theme.colors.teal[6]
+              : 'transparent',
+          color: location.pathname === item.path ? 'white' : undefined,
+          transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+          fontWeight: 600,
+          '&:hover': {
+            transform: location.pathname !== item.path ? 'translateY(-2px)' : undefined,
+            backgroundColor:
+              location.pathname === item.path
+                ? role === 'admin'
+                  ? theme.colors.orange[7]
+                  : theme.colors.teal[7]
+                : role === 'admin'
+                ? theme.colors.orange[0]
+                : theme.colors.teal[0],
+          },
+        },
       }}
     >
       {item.label}
@@ -153,11 +151,30 @@ export default function Navigation({ children }: NavigationProps) {
   );
 
   return (
-    <AppShell header={{ height: 60 }} padding='md'>
-      <AppShell.Header>
+    <AppShell header={{ height: 70 }} padding='md'>
+      <AppShell.Header
+        style={{
+          backdropFilter: 'blur(12px) saturate(180%)',
+          WebkitBackdropFilter: 'blur(12px) saturate(180%)',
+          backgroundColor:
+            colorScheme === 'dark'
+              ? 'rgba(26, 31, 30, 0.9)'
+              : 'rgba(255, 255, 255, 0.9)',
+          borderBottom: `2px solid ${
+            role === 'admin'
+              ? theme.colors.orange[4]
+              : theme.colors.teal[4]
+          }`,
+          boxShadow: `0 2px 8px ${
+            role === 'admin'
+              ? 'rgba(255, 146, 43, 0.12)'
+              : 'rgba(32, 201, 151, 0.12)'
+          }`,
+        }}
+      >
         <Group
           h='100%'
-          px='md'
+          px='xl'
           gap='md'
           wrap='nowrap'
           justify='space-between'
@@ -166,27 +183,93 @@ export default function Navigation({ children }: NavigationProps) {
             width: '100%',
           }}
         >
-          {/* Left side - Logo */}
-          <Group gap='sm' style={{ flexShrink: 0 }}>
-            <Text
-              size='lg'
-              fw={700}
-              style={{ cursor: 'pointer', whiteSpace: 'nowrap' }}
+          {/* Left side - Logo with enhanced design */}
+          <Group gap='md' wrap='nowrap' style={{ flexShrink: 0 }}>
+            {/* Logo Icon */}
+            <Box
               onClick={() => handleNavigation('/')}
+              style={{
+                width: 48,
+                height: 48,
+                borderRadius: '50%',
+                background:
+                  role === 'admin'
+                    ? 'linear-gradient(135deg, rgba(245, 165, 66, 0.25) 0%, rgba(217, 143, 53, 0.35) 100%)'
+                    : 'linear-gradient(135deg, rgba(32, 184, 139, 0.25) 0%, rgba(79, 175, 105, 0.35) 100%)',
+                border: role === 'admin'
+                  ? '2px solid rgba(245, 165, 66, 0.4)'
+                  : '2px solid rgba(32, 184, 139, 0.4)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                boxShadow:
+                  role === 'admin'
+                    ? '0 2px 8px rgba(245, 165, 66, 0.2)'
+                    : '0 2px 8px rgba(32, 184, 139, 0.2)',
+                transition: 'all 0.3s ease',
+                cursor: 'pointer',
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.transform = 'scale(1.05) rotate(5deg)';
+                e.currentTarget.style.background = role === 'admin'
+                  ? 'linear-gradient(135deg, rgba(245, 165, 66, 0.35) 0%, rgba(217, 143, 53, 0.45) 100%)'
+                  : 'linear-gradient(135deg, rgba(32, 184, 139, 0.35) 0%, rgba(79, 175, 105, 0.45) 100%)';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.transform = 'scale(1) rotate(0deg)';
+                e.currentTarget.style.background = role === 'admin'
+                  ? 'linear-gradient(135deg, rgba(245, 165, 66, 0.25) 0%, rgba(217, 143, 53, 0.35) 100%)'
+                  : 'linear-gradient(135deg, rgba(32, 184, 139, 0.25) 0%, rgba(79, 175, 105, 0.35) 100%)';
+              }}
             >
-              Turtle Project
-            </Text>
-            <Badge
-              data-testid='role-badge'
-              color={role === 'admin' ? 'red' : 'blue'}
-              leftSection={
-                role === 'admin' ? <IconShield size={12} /> : <IconUser size={12} />
-              }
-              size='sm'
-              style={{ flexShrink: 0 }}
-            >
-              {role === 'admin' ? 'Admin' : 'Community'}
-            </Badge>
+              <Text size='xl' fw={700} style={{ fontSize: '28px' }}>
+                🐢
+              </Text>
+            </Box>
+
+            {/* Title and Badge */}
+            <Box>
+              <Text
+                size='xl'
+                fw={800}
+                variant='gradient'
+                gradient={{
+                  from: role === 'admin' ? 'orange.7' : 'teal.7',
+                  to: role === 'admin' ? 'red.6' : 'green.6',
+                  deg: 45,
+                }}
+                style={{
+                  cursor: 'pointer',
+                  letterSpacing: '-0.02em',
+                  lineHeight: 1.2,
+                }}
+                onClick={() => handleNavigation('/')}
+              >
+                TurtleTracker
+              </Text>
+              <Badge
+                data-testid='role-badge'
+                color={role === 'admin' ? 'orange' : 'teal'}
+                variant='light'
+                leftSection={
+                  role === 'admin' ? (
+                    <IconShield size={12} />
+                  ) : (
+                    <IconUser size={12} />
+                  )
+                }
+                size='sm'
+                style={{
+                  marginTop: 2,
+                  fontWeight: 700,
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.05em',
+                  fontSize: '0.65rem',
+                }}
+              >
+                {role === 'admin' ? 'Admin' : 'Community'}
+              </Badge>
+            </Box>
           </Group>
 
           {/* Center - Desktop Navigation */}
@@ -207,7 +290,7 @@ export default function Navigation({ children }: NavigationProps) {
           )}
 
           {/* Right side - Login/Logout, Theme Toggle, Mobile Menu */}
-          <Group gap='xs' style={{ flexShrink: 0 }}>
+          <Group gap='sm' style={{ flexShrink: 0 }}>
             {/* Desktop Login/Logout Link */}
             {!showDrawer && (
               <>
@@ -233,8 +316,21 @@ export default function Navigation({ children }: NavigationProps) {
                       variant='subtle'
                       leftSection={<IconLogout size={16} />}
                       onClick={handleLogout}
-                      color={role === 'admin' ? 'red' : 'blue'}
+                      color={role === 'admin' ? 'orange' : 'teal'}
                       style={{ flexShrink: 0 }}
+                      styles={{
+                        root: {
+                          transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                          fontWeight: 600,
+                          '&:hover': {
+                            transform: 'translateY(-2px)',
+                            backgroundColor:
+                              role === 'admin'
+                                ? theme.colors.orange[0]
+                                : theme.colors.teal[0],
+                          },
+                        },
+                      }}
                     >
                       Logout
                     </Button>
@@ -247,19 +343,34 @@ export default function Navigation({ children }: NavigationProps) {
                     color={
                       location.pathname === '/login'
                         ? role === 'admin'
-                          ? 'red'
-                          : 'blue'
+                          ? 'orange'
+                          : 'teal'
                         : undefined
                     }
-                    style={{
-                      backgroundColor:
-                        location.pathname === '/login'
-                          ? role === 'admin'
-                            ? theme.colors.red[6]
-                            : theme.colors.blue[6]
-                          : 'transparent',
-                      color: location.pathname === '/login' ? 'white' : undefined,
-                      transition: 'all 0.2s ease',
+                    styles={{
+                      root: {
+                        backgroundColor:
+                          location.pathname === '/login'
+                            ? role === 'admin'
+                              ? theme.colors.orange[6]
+                              : theme.colors.teal[6]
+                            : 'transparent',
+                        color: location.pathname === '/login' ? 'white' : undefined,
+                        transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                        fontWeight: 600,
+                        '&:hover': {
+                          transform:
+                            location.pathname !== '/login' ? 'translateY(-2px)' : undefined,
+                          backgroundColor:
+                            location.pathname === '/login'
+                              ? role === 'admin'
+                                ? theme.colors.orange[7]
+                                : theme.colors.teal[7]
+                              : role === 'admin'
+                              ? theme.colors.orange[0]
+                              : theme.colors.teal[0],
+                        },
+                      },
                     }}
                   >
                     Login
@@ -269,17 +380,41 @@ export default function Navigation({ children }: NavigationProps) {
             )}
 
             {/* Color Scheme Toggle */}
-            <ActionIcon variant='subtle' onClick={() => toggleColorScheme()} size='lg'>
-              {colorScheme === 'dark' ? <IconSun size={18} /> : <IconMoon size={18} />}
+            <ActionIcon
+              variant='subtle'
+              onClick={() => toggleColorScheme()}
+              size='lg'
+              color={role === 'admin' ? 'orange' : 'teal'}
+              style={{
+                transition: 'all 0.2s ease',
+              }}
+              styles={{
+                root: {
+                  '&:hover': {
+                    transform: 'rotate(180deg)',
+                    backgroundColor:
+                      role === 'admin'
+                        ? theme.colors.orange[1]
+                        : theme.colors.teal[1],
+                  },
+                },
+              }}
+            >
+              {colorScheme === 'dark' ? <IconSun size={20} /> : <IconMoon size={20} />}
             </ActionIcon>
 
-            {/* Burger Menu - shown when drawer should be used */}
+            {/* Burger Menu */}
             {showDrawer && (
               <Burger
                 data-testid='mobile-menu-button'
                 opened={opened}
                 onClick={toggle}
                 size='sm'
+                color={
+                  role === 'admin'
+                    ? theme.colors.orange[6]
+                    : theme.colors.teal[6]
+                }
               />
             )}
           </Group>
@@ -287,7 +422,28 @@ export default function Navigation({ children }: NavigationProps) {
       </AppShell.Header>
 
       {/* Mobile Drawer */}
-      <Drawer opened={opened} onClose={close} position='right' size='xs'>
+      <Drawer
+        opened={opened}
+        onClose={close}
+        position='right'
+        size='xs'
+        styles={{
+          content: {
+            backdropFilter: 'blur(16px)',
+            backgroundColor:
+              colorScheme === 'dark'
+                ? 'rgba(26, 31, 30, 0.95)'
+                : 'rgba(255, 255, 255, 0.95)',
+          },
+          header: {
+            borderBottom: `2px solid ${
+              role === 'admin'
+                ? theme.colors.orange[3]
+                : theme.colors.teal[3]
+            }`,
+          },
+        }}
+      >
         <Stack gap='xs' h='90vh' justify='space-between'>
           {/* Main navigation links at top */}
           <Stack gap='xs'>
@@ -308,7 +464,13 @@ export default function Navigation({ children }: NavigationProps) {
                 variant='light'
                 leftSection={<IconLogout size={16} />}
                 onClick={handleLogout}
-                color={role === 'admin' ? 'red' : 'blue'}
+                color={role === 'admin' ? 'orange' : 'teal'}
+                styles={{
+                  root: {
+                    transition: 'all 0.3s ease',
+                    fontWeight: 600,
+                  },
+                }}
               >
                 Logout
               </Button>
@@ -321,19 +483,22 @@ export default function Navigation({ children }: NavigationProps) {
               color={
                 location.pathname === '/login'
                   ? role === 'admin'
-                    ? 'red'
-                    : 'blue'
+                    ? 'orange'
+                    : 'teal'
                   : undefined
               }
-              style={{
-                backgroundColor:
-                  location.pathname === '/login'
-                    ? role === 'admin'
-                      ? theme.colors.red[6]
-                      : theme.colors.blue[6]
-                    : undefined,
-                color: location.pathname === '/login' ? 'white' : undefined,
-                transition: 'all 0.2s ease',
+              styles={{
+                root: {
+                  backgroundColor:
+                    location.pathname === '/login'
+                      ? role === 'admin'
+                        ? theme.colors.orange[6]
+                        : theme.colors.teal[6]
+                      : undefined,
+                  color: location.pathname === '/login' ? 'white' : undefined,
+                  transition: 'all 0.3s ease',
+                  fontWeight: 600,
+                },
               }}
             >
               Login
