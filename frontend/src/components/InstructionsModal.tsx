@@ -12,7 +12,7 @@ import {
   ScrollArea,
 } from '@mantine/core';
 import { IconCamera, IconCheck } from '@tabler/icons-react';
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import step1Image from '../assets/step1.jpg';
 import step2Image from '../assets/step2.jpg';
 import finalResultImage from '../assets/finalresult.jpg';
@@ -25,11 +25,11 @@ interface InstructionsModalProps {
 export function InstructionsModal({ opened, onClose }: InstructionsModalProps) {
   const [hasScrolledToBottom, setHasScrolledToBottom] = useState(false);
   const [acknowledged, setAcknowledged] = useState(false);
+  const viewportRef = useRef<HTMLDivElement>(null);
 
   const handleScroll = () => {
-    const scrollArea = document.querySelector('.instructions-scroll-area');
-    if (scrollArea) {
-      const { scrollTop, scrollHeight, clientHeight } = scrollArea;
+    if (viewportRef.current) {
+      const { scrollTop, scrollHeight, clientHeight } = viewportRef.current;
       // Check if scrolled to bottom (with small threshold)
       if (scrollHeight - scrollTop - clientHeight < 10) {
         setHasScrolledToBottom(true);
@@ -44,16 +44,23 @@ export function InstructionsModal({ opened, onClose }: InstructionsModalProps) {
     }
   };
 
+  const handleModalClose = () => {
+    // Allow closing if acknowledged and scrolled, otherwise prevent
+    if (acknowledged && hasScrolledToBottom) {
+      handleClose();
+    }
+  };
+
   return (
     <Modal 
       opened={opened} 
-      onClose={handleClose}
+      onClose={handleModalClose}
       title="Photo Submission Instructions" 
       size="1200px" 
       centered
-      closeOnClickOutside={false}
-      closeOnEscape={false}
-      withCloseButton={false}
+      closeOnClickOutside={acknowledged && hasScrolledToBottom}
+      closeOnEscape={acknowledged && hasScrolledToBottom}
+      withCloseButton={acknowledged && hasScrolledToBottom}
       styles={{
         title: { fontSize: '1.75rem', fontWeight: 700 },
         body: { fontSize: '1rem', padding: 0 },
@@ -62,7 +69,7 @@ export function InstructionsModal({ opened, onClose }: InstructionsModalProps) {
       <ScrollArea 
         h={600} 
         onScrollPositionChange={handleScroll}
-        className="instructions-scroll-area"
+        viewportRef={viewportRef}
         styles={{ viewport: { padding: '0 var(--mantine-spacing-md)' } }}
       >
         <Stack gap="lg" pb="md">
@@ -191,25 +198,25 @@ export function InstructionsModal({ opened, onClose }: InstructionsModalProps) {
 
             <Paper withBorder p="lg" style={{ borderLeftWidth: 4, borderLeftColor: 'var(--mantine-color-teal-6)' }}>
               <Text size="lg" style={{ lineHeight: 1.8 }}>
-                â€¢ Clean the plastron gently if it's dirty to reveal pattern details
+                • Clean the plastron gently if it's dirty to reveal pattern details
               </Text>
             </Paper>
 
             <Paper withBorder p="lg" style={{ borderLeftWidth: 4, borderLeftColor: 'var(--mantine-color-cyan-6)' }}>
               <Text size="lg" style={{ lineHeight: 1.8 }}>
-                â€¢ Take multiple photos from slightly different angles
+                • Take multiple photos from slightly different angles
               </Text>
             </Paper>
 
             <Paper withBorder p="lg" style={{ borderLeftWidth: 4, borderLeftColor: 'var(--mantine-color-teal-6)' }}>
               <Text size="lg" style={{ lineHeight: 1.8 }}>
-                â€¢ Include a scale reference (like a ruler) if possible
+                • Include a scale reference (like a ruler) if possible
               </Text>
             </Paper>
 
             <Paper withBorder p="lg" style={{ borderLeftWidth: 4, borderLeftColor: 'var(--mantine-color-cyan-6)' }}>
               <Text size="lg" style={{ lineHeight: 1.8 }}>
-                â€¢ Handle turtles with care and return them safely to their habitat
+                • Handle turtles with care and return them safely to their habitat
               </Text>
             </Paper>
           </Stack>
@@ -230,7 +237,7 @@ export function InstructionsModal({ opened, onClose }: InstructionsModalProps) {
               />
               {!hasScrolledToBottom && (
                 <Text size="md" c="dimmed">
-                  â¬‡ï¸ Please scroll to the bottom to continue
+                  ⬇️ Please scroll to the bottom to continue
                 </Text>
               )}
             </Stack>
