@@ -216,6 +216,8 @@ export interface ReviewQueueItem {
     finder?: string;
     email?: string;
     uploaded_at?: number;
+    state?: string;
+    location?: string;
   };
   candidates: Array<{
     rank: number;
@@ -234,6 +236,8 @@ export interface ReviewQueueResponse {
 export interface ApproveReviewRequest {
   match_turtle_id?: string;
   new_location?: string;
+  new_turtle_id?: string;
+  uploaded_image_path?: string;
 }
 
 export interface ApproveReviewResponse {
@@ -245,12 +249,18 @@ export interface ApproveReviewResponse {
 export const uploadTurtlePhoto = async (
   file: File,
   role: 'admin' | 'community',
-  email: string
+  email: string,
+  location?: { state: string; location: string }
 ): Promise<UploadPhotoResponse> => {
   const formData = new FormData();
   formData.append('file', file);
   formData.append('role', role);
   formData.append('email', email);
+
+  if (location) {
+    formData.append('state', location.state);
+    formData.append('location', location.location);
+  }
 
   const response = await fetch(`${TURTLE_API_BASE_URL}/upload`, {
     method: 'POST',

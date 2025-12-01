@@ -24,6 +24,8 @@ interface UsePhotoUploadReturn {
   isDuplicate: boolean;
   previousUploadDate: string | null;
   isGettingLocation: boolean;
+  locationData: { state: string; location: string };
+  setLocationData: (data: { state: string; location: string }) => void;
   handleDrop: (acceptedFiles: FileWithPath[]) => void;
   handleUpload: () => Promise<void>;
   handleRemove: () => void;
@@ -44,6 +46,10 @@ export function usePhotoUpload({
   const [isDuplicate, setIsDuplicate] = useState(false);
   const [previousUploadDate, setPreviousUploadDate] = useState<string | null>(null);
   const [isGettingLocation, setIsGettingLocation] = useState(false);
+  const [locationData, setLocationData] = useState<{ state: string; location: string }>({
+    state: '',
+    location: '',
+  });
   const progressIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Cleanup interval on unmount
@@ -141,7 +147,10 @@ export function usePhotoUpload({
       const response: UploadPhotoResponse = await uploadTurtlePhoto(
         file,
         userRole,
-        userEmail
+        userEmail,
+        locationData.state && locationData.location
+          ? { state: locationData.state, location: locationData.location }
+          : undefined
       );
 
       // Clear interval and set to 100%
@@ -152,18 +161,13 @@ export function usePhotoUpload({
       setUploadProgress(100);
 
       if (response.success) {
-        // Admin: If matches found, save match data and navigate to match page
-        if (
-          userRole === 'admin' &&
-          response.matches &&
-          response.matches.length > 0 &&
-          response.request_id
-        ) {
+        // Admin: Always navigate to match page (even if no matches found)
+        if (userRole === 'admin' && response.request_id) {
           // Save match data to localStorage for the match page
           const matchData = {
             request_id: response.request_id,
             uploaded_image_path: response.uploaded_image_path || '',
-            matches: response.matches,
+            matches: response.matches || [], // Empty array if no matches
           };
           localStorage.setItem(`match_${response.request_id}`, JSON.stringify(matchData));
 
@@ -172,7 +176,7 @@ export function usePhotoUpload({
           return;
         }
 
-        // Community or admin without matches: Show success message
+        // Community: Show success message
         setUploadState('success');
         setUploadResponse(response.message);
         setImageId(response.request_id || null);
@@ -227,6 +231,7 @@ export function usePhotoUpload({
     setImageId(null);
     setIsDuplicate(false);
     setPreviousUploadDate(null);
+    setLocationData({ state: '', location: '' });
   };
 
   return {
@@ -239,6 +244,8 @@ export function usePhotoUpload({
     isDuplicate,
     previousUploadDate,
     isGettingLocation,
+    locationData,
+    setLocationData,
     handleDrop,
     handleUpload,
     handleRemove,

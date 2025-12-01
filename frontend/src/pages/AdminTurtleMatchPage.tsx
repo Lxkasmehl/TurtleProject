@@ -13,8 +13,10 @@ import {
   Alert,
   Image,
   Card,
+  Modal,
+  TextInput,
 } from '@mantine/core';
-import { IconPhoto, IconCheck, IconArrowLeft } from '@tabler/icons-react';
+import { IconPhoto, IconCheck, IconArrowLeft, IconPlus } from '@tabler/icons-react';
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useUser } from '../hooks/useUser';
@@ -35,6 +37,12 @@ export default function AdminTurtleMatchPage() {
   const [loading, setLoading] = useState(true);
   const [selectedMatch, setSelectedMatch] = useState<string | null>(null);
   const [processing, setProcessing] = useState(false);
+  const [newTurtleModalOpen, setNewTurtleModalOpen] = useState(false);
+  const [newTurtleData, setNewTurtleData] = useState({
+    state: '',
+    location: '',
+    turtleId: '',
+  });
 
   useEffect(() => {
     // Check if user is admin
@@ -115,6 +123,60 @@ export default function AdminTurtleMatchPage() {
     navigate('/');
   };
 
+  const handleCreateNewTurtle = async () => {
+    if (!newTurtleData.state || !newTurtleData.location || !newTurtleData.turtleId) {
+      notifications.show({
+        title: 'Error',
+        message: 'Please fill in all fields',
+        color: 'red',
+      });
+      return;
+    }
+
+    if (!imageId) {
+      notifications.show({
+        title: 'Error',
+        message: 'Missing request ID',
+        color: 'red',
+      });
+      return;
+    }
+
+    setProcessing(true);
+    try {
+      // Create new location string in format "State/Location"
+      const newLocation = `${newTurtleData.state}/${newTurtleData.location}`;
+
+      await approveReview(imageId, {
+        new_location: newLocation,
+        new_turtle_id: newTurtleData.turtleId,
+        uploaded_image_path: matchData?.uploaded_image_path,
+      });
+
+      // Remove from localStorage
+      localStorage.removeItem(`match_${imageId}`);
+
+      notifications.show({
+        title: 'Success!',
+        message: `New turtle ${newTurtleData.turtleId} created successfully`,
+        color: 'green',
+        icon: <IconCheck size={18} />,
+      });
+
+      // Navigate back to home
+      navigate('/');
+    } catch (error) {
+      notifications.show({
+        title: 'Error',
+        message: error instanceof Error ? error.message : 'Failed to create new turtle',
+        color: 'red',
+      });
+    } finally {
+      setProcessing(false);
+      setNewTurtleModalOpen(false);
+    }
+  };
+
   if (role !== 'admin') {
     return null;
   }
@@ -172,9 +234,17 @@ export default function AdminTurtleMatchPage() {
                 <Text size='sm' c='dimmed' ta='center'>
                   The uploaded photo could not be matched to any existing turtles
                 </Text>
-                <Button onClick={handleSkip} variant='light'>
-                  Go Back
-                </Button>
+                <Group gap='md'>
+                  <Button onClick={handleSkip} variant='light'>
+                    Go Back
+                  </Button>
+                  <Button
+                    leftSection={<IconPlus size={16} />}
+                    onClick={() => setNewTurtleModalOpen(true)}
+                  >
+                    Create New Turtle
+                  </Button>
+                </Group>
               </Stack>
             </Center>
           </Paper>
@@ -266,6 +336,14 @@ export default function AdminTurtleMatchPage() {
                 Skip
               </Button>
               <Button
+                variant='outline'
+                leftSection={<IconPlus size={16} />}
+                onClick={() => setNewTurtleModalOpen(true)}
+                disabled={processing}
+              >
+                Create New Turtle
+              </Button>
+              <Button
                 onClick={handleConfirmMatch}
                 disabled={!selectedMatch || processing}
                 loading={processing}
@@ -275,6 +353,71 @@ export default function AdminTurtleMatchPage() {
             </Group>
           </>
         )}
+
+        {/* Create New Turtle Modal */}
+        <Modal
+          opened={newTurtleModalOpen}
+          onClose={() => setNewTurtleModalOpen(false)}
+          title='Create New Turtle'
+          size='md'
+        >
+          <Stack gap='md'>
+            <Alert color='blue' radius='md'>
+              <Text size='sm'>
+                Create a new turtle entry for this photo. This will add the turtle to the
+                system with the specified location and ID.
+              </Text>
+            </Alert>
+
+            <TextInput
+              label='Turtle ID'
+              placeholder='e.g., T101, F42'
+              description='Format: Letter + Number (e.g., T101, F42)'
+              value={newTurtleData.turtleId}
+              onChange={(e) =>
+                setNewTurtleData({ ...newTurtleData, turtleId: e.target.value })
+              }
+              required
+            />
+
+            <TextInput
+              label='State'
+              placeholder='e.g., Kansas, Nebraska'
+              value={newTurtleData.state}
+              onChange={(e) =>
+                setNewTurtleData({ ...newTurtleData, state: e.target.value })
+              }
+              required
+            />
+
+            <TextInput
+              label='Location'
+              placeholder='e.g., Topeka, Lawrence'
+              value={newTurtleData.location}
+              onChange={(e) =>
+                setNewTurtleData({ ...newTurtleData, location: e.target.value })
+              }
+              required
+            />
+
+            <Group justify='flex-end' gap='md' mt='md'>
+              <Button
+                variant='light'
+                onClick={() => setNewTurtleModalOpen(false)}
+                disabled={processing}
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={handleCreateNewTurtle}
+                loading={processing}
+                leftSection={<IconPlus size={16} />}
+              >
+                Create Turtle
+              </Button>
+            </Group>
+          </Stack>
+        </Modal>
       </Stack>
     </Container>
   );

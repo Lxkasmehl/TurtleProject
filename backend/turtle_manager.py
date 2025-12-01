@@ -344,51 +344,119 @@ class TurtleManager:
         dest_path = os.path.join(loose_dir, save_name)
 
         try:
+            # Copy the image
             shutil.copy2(source_image_path, dest_path)
-            print(f"✅ Observation added to {turtle_id}")
+            print(f"📸 Image copied to {dest_path}")
+            
+            # 3. Process the image (create .npz file for future searches)
+            # This allows the observation to be found in future searches
+            npz_name = os.path.splitext(save_name)[0] + ".npz"
+            npz_path = os.path.join(loose_dir, npz_name)
+            
+            print(f"🔍 Processing observation image for SIFT/VLAD features...")
+            success, _ = process_image_through_SIFT(dest_path, npz_path)
+            
+            if success:
+                print(f"✅ Observation processed and added to {turtle_id}")
+                print(f"   Image: {dest_path}")
+                print(f"   Features: {npz_path}")
+            else:
+                print(f"⚠️ Warning: Image saved but SIFT processing failed for {turtle_id}")
+                print(f"   Image: {dest_path}")
+            
             return True, dest_path
         except Exception as e:
             return False, str(e)
 
-    def approve_review_packet(self, request_id, match_turtle_id=None, new_location=None):
+    def approve_review_packet(self, request_id, match_turtle_id=None, new_location=None, new_turtle_id=None, uploaded_image_path=None):
         """
         Called when Admin approves a packet.
         - If match_turtle_id is set: Adds image to that existing turtle's 'loose_images'.
-        - If new_location is set: Creates a NEW turtle folder there.
+        - If new_location and new_turtle_id are set: Creates a NEW turtle folder there.
+        
+        Args:
+            request_id: The request ID (can be from review queue or admin upload)
+            match_turtle_id: Existing turtle ID to add observation to
+            new_location: Location for new turtle (format: "State/Location")
+            new_turtle_id: ID for new turtle (e.g., "T101")
+            uploaded_image_path: Direct path to uploaded image (for admin uploads not in queue)
         """
-        packet_dir = os.path.join(self.review_queue_dir, request_id)
-        if not os.path.exists(packet_dir):
-            return False, "Request not found"
-
-        # Find the uploaded image inside the packet (ignoring subfolders)
+        # Try to find image in review queue first
         query_image = None
-        for f in os.listdir(packet_dir):
-            if f.lower().endswith(('.jpg', '.png', '.jpeg')):
-                query_image = os.path.join(packet_dir, f)
-                break
+        packet_dir = os.path.join(self.review_queue_dir, request_id)
+        
+        if os.path.exists(packet_dir):
+            # Find the uploaded image inside the packet (ignoring subfolders)
+            for f in os.listdir(packet_dir):
+                if f.lower().endswith(('.jpg', '.png', '.jpeg')) and f != 'metadata.json':
+                    query_image = os.path.join(packet_dir, f)
+                    break
+        elif uploaded_image_path and os.path.exists(uploaded_image_path):
+            # Admin upload: use the direct path provided
+            query_image = uploaded_image_path
+        else:
+            return False, "Request not found and no image path provided"
 
-        if not query_image:
-            return "Error: No image found in packet."
+        if not query_image or not os.path.exists(query_image):
+            return False, "Error: No image found."
 
         # Logic: existing match vs new turtle
         if match_turtle_id:
-            # Move to existing folder (You will need a helper to find where TurtleID lives)
-            # For now, we print what we would do
-            print(f"Moving {query_image} to Turtle {match_turtle_id} loose_images...")
-            # self._add_to_existing_turtle(match_turtle_id, query_image)
+            # Add to existing turtle's loose_images folder
+            print(f"📸 Adding observation to existing Turtle {match_turtle_id}...")
+            success, message = self.add_observation_to_turtle(query_image, match_turtle_id)
+            if not success:
+                return False, f"Failed to add to existing turtle: {message}"
+            print(f"✅ Observation added to {match_turtle_id}")
 
-        elif new_location:
-            # Treat as new turtle
-            print(f"Creating new turtle from {query_image} at {new_location}...")
-            # self._process_single_turtle(query_image, ..., new_location)
+        elif new_location and new_turtle_id:
+            # Create new turtle
+            print(f"🐢 Creating new turtle {new_turtle_id} at {new_location}...")
+            
+            # Parse location (format: "State/Location")
+            if "/" in new_location:
+                state, loc = new_location.split("/", 1)
+                location_dir = os.path.join(self.base_dir, state, loc)
+            else:
+                # Handle roots like "Incidental_Finds"
+                location_dir = os.path.join(self.base_dir, new_location)
+            
+            # Ensure location directory exists
+            os.makedirs(location_dir, exist_ok=True)
+            
+            # Process the new turtle (this will create the turtle folder and process the image)
+            status = self._process_single_turtle(query_image, location_dir, new_turtle_id)
+            
+            if status == "created":
+                print(f"✅ New turtle {new_turtle_id} created successfully at {new_location}")
+            elif status == "skipped":
+                return False, f"Turtle {new_turtle_id} already exists at {new_location}"
+            else:
+                return False, f"Failed to process image for new turtle {new_turtle_id}"
+        else:
+            return False, "Either match_turtle_id or both new_location and new_turtle_id must be provided"
 
-        try:
-            shutil.rmtree(packet_dir)
-            print(f"🗑️ Queue Item {request_id} deleted (Processed).")
-            return True, "Processed successfully"
-        except Exception as e:
-            print(f"Error deleting packet: {e}")
-            return False, str(e)
+        # Clean up the review packet (only if it exists in review queue)
+        if os.path.exists(packet_dir):
+            try:
+                shutil.rmtree(packet_dir)
+                print(f"🗑️ Queue Item {request_id} deleted (Processed).")
+            except Exception as e:
+                print(f"⚠️ Error deleting packet: {e}")
+                # Still return success since the main operation completed
+                return True, f"Processed successfully (cleanup warning: {str(e)})"
+        else:
+            # Admin upload: clean up temp file if it's in temp directory
+            import tempfile
+            temp_dir = tempfile.gettempdir()
+            if query_image.startswith(temp_dir):
+                try:
+                    os.remove(query_image)
+                    print(f"🗑️ Temp file deleted: {os.path.basename(query_image)}")
+                except Exception as e:
+                    print(f"⚠️ Error deleting temp file: {e}")
+        
+        return True, "Processed successfully"
 
 # --- TEST BLOCK ---
 if __name__ == "__main__":

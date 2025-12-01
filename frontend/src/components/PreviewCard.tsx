@@ -10,6 +10,7 @@ import {
   Progress,
   Center,
   Loader,
+  TextInput,
 } from '@mantine/core';
 import { Transition } from '@mantine/core';
 import {
@@ -33,6 +34,8 @@ interface PreviewCardProps {
   previousUploadDate: string | null;
   isGettingLocation: boolean;
   role?: string;
+  locationData?: { state: string; location: string };
+  setLocationData?: (data: { state: string; location: string }) => void;
   onUpload: () => void;
   onRemove: () => void;
 }
@@ -48,6 +51,8 @@ export function PreviewCard({
   previousUploadDate,
   isGettingLocation,
   role,
+  locationData,
+  setLocationData,
   onUpload,
   onRemove,
 }: PreviewCardProps) {
@@ -85,6 +90,38 @@ export function PreviewCard({
               <Text size='sm' c='dimmed'>
                 File: {files[0].name} ({(files[0].size / 1024 / 1024).toFixed(2)} MB)
               </Text>
+            )}
+
+            {/* Location Input Fields (only for community members) */}
+            {role === 'community' && uploadState === 'idle' && locationData && setLocationData && (
+              <Stack gap='sm'>
+                <Alert color='blue' radius='md' size='sm'>
+                  <Text size='xs'>
+                    Please provide the location where you found this turtle. This helps us
+                    track turtle populations.
+                  </Text>
+                </Alert>
+                <Group grow>
+                  <TextInput
+                    label='State'
+                    placeholder='e.g., Kansas, Nebraska'
+                    value={locationData.state}
+                    onChange={(e) =>
+                      setLocationData({ ...locationData, state: e.target.value })
+                    }
+                    required
+                  />
+                  <TextInput
+                    label='Location'
+                    placeholder='e.g., Topeka, Lawrence'
+                    value={locationData.location}
+                    onChange={(e) =>
+                      setLocationData({ ...locationData, location: e.target.value })
+                    }
+                    required
+                  />
+                </Group>
+              </Stack>
             )}
 
             {uploadState === 'uploading' && (

@@ -21,6 +21,8 @@ export default function HomePage() {
     isDuplicate,
     previousUploadDate,
     isGettingLocation,
+    locationData,
+    setLocationData,
     handleDrop,
     handleUpload,
     handleRemove,
@@ -127,6 +129,8 @@ export default function HomePage() {
             previousUploadDate={previousUploadDate}
             isGettingLocation={isGettingLocation}
             role={role}
+            locationData={locationData}
+            setLocationData={setLocationData}
             onUpload={handleUpload}
             onRemove={handleRemove}
           />

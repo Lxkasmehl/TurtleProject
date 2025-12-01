@@ -1,1 +1,28 @@
 data/
+
+# Python cache files
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+
+# Generated model and index files
+vlad_vocab.pkl
+turtles.index
+metadata.pkl
+global_vlad_array.npy
+trained_kmeans_vocabulary.pkl
+
+# Archive files
+*.zip
+archive.zip
+
+# Environment and IDE files
+.env
+.venv
+venv/
+*.swp
+*.swo
+*~
+.DS_Store

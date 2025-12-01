@@ -45,6 +45,8 @@ def upload_photo():
         file = request.files['file']
         user_role = request.form.get('role', 'community')  # 'admin' or 'community'
         user_email = request.form.get('email', 'anonymous')
+        state = request.form.get('state', '')  # Optional: State where turtle was found
+        location = request.form.get('location', '')  # Optional: Specific location
         
         if file.filename == '':
             return jsonify({'error': 'No file selected'}), 400
@@ -89,25 +91,38 @@ def upload_photo():
             # Create a temporary request ID for this admin upload
             request_id = f"admin_{int(time.time())}_{filename}"
             
+            # Adjust message based on number of matches
+            if len(formatted_matches) > 0:
+                message = f'Photo processed successfully. {len(formatted_matches)} matches found.'
+            else:
+                message = 'Photo processed successfully. No matches found. You can create a new turtle.'
+            
             return jsonify({
                 'success': True,
                 'request_id': request_id,
                 'matches': formatted_matches,
                 'uploaded_image_path': temp_path,
-                'message': 'Photo processed successfully. Top 5 matches found.'
+                'message': message
             })
         
         else:
             # Community: Save to review queue
             print(f"👤 Community upload: Processing {filename}...")
             finder_name = user_email.split('@')[0] if '@' in user_email else 'anonymous'
+            user_info = {
+                'finder': finder_name,
+                'email': user_email,
+                'uploaded_at': time.time()
+            }
+            # Add location data if provided
+            if state and location:
+                user_info['state'] = state
+                user_info['location'] = location
+                print(f"📍 Location provided: {state}/{location}")
+            
             request_id = manager.create_review_packet(
                 temp_path,
-                user_info={
-                    'finder': finder_name,
-                    'email': user_email,
-                    'uploaded_at': time.time()
-                }
+                user_info=user_info
             )
             print(f"✅ Review packet created: {request_id}")
             
@@ -207,17 +222,21 @@ def get_review_queue():
 def approve_review(request_id):
     """
     Approve a review queue item (Admin only)
-    Admin selects which of the 5 matches is the correct one
+    Admin selects which of the 5 matches is the correct one, OR creates a new turtle
     """
     data = request.json
     match_turtle_id = data.get('match_turtle_id')  # The turtle ID that was selected
-    new_location = data.get('new_location')  # Optional: if creating new turtle
+    new_location = data.get('new_location')  # Optional: if creating new turtle (format: "State/Location")
+    new_turtle_id = data.get('new_turtle_id')  # Optional: Turtle ID for new turtle (e.g., "T101")
+    uploaded_image_path = data.get('uploaded_image_path')  # Optional: direct path for admin uploads
     
     try:
         success, message = manager.approve_review_packet(
             request_id,
             match_turtle_id=match_turtle_id,
-            new_location=new_location
+            new_location=new_location,
+            new_turtle_id=new_turtle_id,
+            uploaded_image_path=uploaded_image_path
         )
         
         if success:
@@ -229,6 +248,10 @@ def approve_review(request_id):
             return jsonify({'error': message}), 400
     
     except Exception as e:
+        import traceback
+        error_trace = traceback.format_exc()
+        print(f"❌ Error approving review: {str(e)}")
+        print(f"Traceback:\n{error_trace}")
         return jsonify({'error': f'Failed to approve review: {str(e)}'}), 500
 
 @app.route('/api/images', methods=['GET'])

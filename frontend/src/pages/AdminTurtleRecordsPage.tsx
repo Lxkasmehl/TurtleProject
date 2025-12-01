@@ -14,9 +14,10 @@ import {
   Card,
   Image,
   Modal,
+  TextInput,
 } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
-import { IconPhoto, IconInfoCircle, IconCheck } from '@tabler/icons-react';
+import { IconPhoto, IconInfoCircle, IconCheck, IconPlus } from '@tabler/icons-react';
 import { useEffect, useState } from 'react';
 import { useUser } from '../hooks/useUser';
 import { useNavigate } from 'react-router-dom';
@@ -36,6 +37,12 @@ export default function AdminTurtleRecordsPage() {
   const [selectedItem, setSelectedItem] = useState<ReviewQueueItem | null>(null);
   const [opened, { open, close }] = useDisclosure(false);
   const [processing, setProcessing] = useState<string | null>(null);
+  const [newTurtleModalOpen, setNewTurtleModalOpen] = useState(false);
+  const [newTurtleData, setNewTurtleData] = useState({
+    state: '',
+    location: '',
+    turtleId: '',
+  });
 
   useEffect(() => {
     // Check if user is admin
@@ -103,13 +110,80 @@ export default function AdminTurtleRecordsPage() {
   };
 
   const handleCreateNew = async (item: ReviewQueueItem) => {
-    console.log(item);
-    // For now, we'll skip this - can be implemented later
-    notifications.show({
-      title: 'Info',
-      message: 'Creating new turtle is not yet implemented',
-      color: 'blue',
-    });
+    if (!item) return;
+
+    // Pre-fill location data if available
+    if (item.metadata.state && item.metadata.location) {
+      setNewTurtleData({
+        state: item.metadata.state,
+        location: item.metadata.location,
+        turtleId: '',
+      });
+    } else {
+      setNewTurtleData({
+        state: '',
+        location: '',
+        turtleId: '',
+      });
+    }
+
+    // Open the modal for creating new turtle
+    setSelectedItem(item);
+    setNewTurtleModalOpen(true);
+  };
+
+  const handleCreateNewTurtle = async () => {
+    if (!selectedItem) return;
+
+    if (!newTurtleData.state || !newTurtleData.location || !newTurtleData.turtleId) {
+      notifications.show({
+        title: 'Error',
+        message: 'Please fill in all fields',
+        color: 'red',
+      });
+      return;
+    }
+
+    setProcessing(selectedItem.request_id);
+    try {
+      // Create new location string in format "State/Location"
+      const newLocation = `${newTurtleData.state}/${newTurtleData.location}`;
+
+      await approveReview(selectedItem.request_id, {
+        new_location: newLocation,
+        new_turtle_id: newTurtleData.turtleId,
+        uploaded_image_path: selectedItem.uploaded_image,
+      });
+
+      notifications.show({
+        title: 'Success!',
+        message: `New turtle ${newTurtleData.turtleId} created successfully`,
+        color: 'green',
+        icon: <IconCheck size={18} />,
+      });
+
+      // Remove from queue
+      setQueueItems((prev) =>
+        prev.filter((i) => i.request_id !== selectedItem.request_id)
+      );
+      close();
+      setNewTurtleModalOpen(false);
+
+      // Reset form
+      setNewTurtleData({
+        state: '',
+        location: '',
+        turtleId: '',
+      });
+    } catch (error) {
+      notifications.show({
+        title: 'Error',
+        message: error instanceof Error ? error.message : 'Failed to create new turtle',
+        color: 'red',
+      });
+    } finally {
+      setProcessing(null);
+    }
   };
 
   if (role !== 'admin') {
@@ -230,9 +304,19 @@ export default function AdminTurtleRecordsPage() {
             <Paper p='md' radius='md' withBorder>
               <Stack gap='sm'>
                 <Text fw={500}>Uploaded Photo</Text>
-                <Text size='xs' c='dimmed'>
-                  By: {selectedItem.metadata.finder || 'Anonymous'}
-                </Text>
+                <Group justify='space-between' align='flex-start'>
+                  <div>
+                    <Text size='xs' c='dimmed'>
+                      By: {selectedItem.metadata.finder || 'Anonymous'}
+                    </Text>
+                    {selectedItem.metadata.state && selectedItem.metadata.location && (
+                      <Text size='xs' c='dimmed' mt={4}>
+                        Location: {selectedItem.metadata.state} /{' '}
+                        {selectedItem.metadata.location}
+                      </Text>
+                    )}
+                  </div>
+                </Group>
                 {selectedItem.uploaded_image && (
                   <Image
                     src={getImageUrl(selectedItem.uploaded_image)}
@@ -305,12 +389,102 @@ export default function AdminTurtleRecordsPage() {
               <Button variant='light' onClick={close}>
                 Cancel
               </Button>
-              <Button variant='outline' onClick={() => handleCreateNew(selectedItem)}>
+              <Button
+                variant='outline'
+                leftSection={<IconPlus size={16} />}
+                onClick={() => handleCreateNew(selectedItem)}
+                disabled={processing === selectedItem.request_id}
+              >
                 Create New Turtle
               </Button>
             </Group>
           </Stack>
         )}
+      </Modal>
+
+      {/* Create New Turtle Modal */}
+      <Modal
+        opened={newTurtleModalOpen}
+        onClose={() => {
+          setNewTurtleModalOpen(false);
+          setNewTurtleData({
+            state: '',
+            location: '',
+            turtleId: '',
+          });
+        }}
+        title='Create New Turtle'
+        size='md'
+      >
+        <Stack gap='md'>
+          <Alert color='blue' radius='md'>
+            <Text size='sm'>
+              Create a new turtle entry for this photo. This will add the turtle to the
+              system with the specified location and ID.
+            </Text>
+            {selectedItem?.metadata.state && selectedItem?.metadata.location && (
+              <Text size='xs' c='dimmed' mt='xs'>
+                Location pre-filled from upload: {selectedItem.metadata.state} /{' '}
+                {selectedItem.metadata.location}
+              </Text>
+            )}
+          </Alert>
+
+          <TextInput
+            label='Turtle ID'
+            placeholder='e.g., T101, F42'
+            description='Format: Letter + Number (e.g., T101, F42)'
+            value={newTurtleData.turtleId}
+            onChange={(e) =>
+              setNewTurtleData({ ...newTurtleData, turtleId: e.target.value })
+            }
+            required
+          />
+
+          <TextInput
+            label='State'
+            placeholder='e.g., Kansas, Nebraska'
+            value={newTurtleData.state}
+            onChange={(e) =>
+              setNewTurtleData({ ...newTurtleData, state: e.target.value })
+            }
+            required
+          />
+
+          <TextInput
+            label='Location'
+            placeholder='e.g., Topeka, Lawrence'
+            value={newTurtleData.location}
+            onChange={(e) =>
+              setNewTurtleData({ ...newTurtleData, location: e.target.value })
+            }
+            required
+          />
+
+          <Group justify='flex-end' gap='md' mt='md'>
+            <Button
+              variant='light'
+              onClick={() => {
+                setNewTurtleModalOpen(false);
+                setNewTurtleData({
+                  state: '',
+                  location: '',
+                  turtleId: '',
+                });
+              }}
+              disabled={processing === selectedItem?.request_id}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleCreateNewTurtle}
+              loading={processing === selectedItem?.request_id}
+              leftSection={<IconPlus size={16} />}
+            >
+              Create Turtle
+            </Button>
+          </Group>
+        </Stack>
       </Modal>
     </Container>
   );
