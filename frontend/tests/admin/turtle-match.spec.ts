@@ -7,6 +7,12 @@ import {
   clickUploadPhotoButton,
 } from '../helpers';
 
+test.beforeEach(async ({ page }) => {
+  await page.addInitScript(() => {
+    localStorage.setItem('hasSeenInstructions', 'true');
+  });
+});
+
 test.describe('Admin Turtle Match Page Tests', () => {
   test.beforeEach(async ({ page }) => {
     // Clear localStorage before each test
