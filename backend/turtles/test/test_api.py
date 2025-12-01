@@ -1,7 +1,7 @@
 import requests
 
 # The URL of your Django API endpoint
-url = 'http://127.0.0.1:8000/api/identify/'
+url = 'http://127.0.0.1:8000/api/identify/upload/'
 
 # Path to the image you want to identify
 # CHANGE THIS to a real path on your computer!

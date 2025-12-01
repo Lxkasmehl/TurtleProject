@@ -141,7 +141,7 @@ def find_near_matches(query_image, top_k=5):
                 'gender': m['turtle'].gender,
                 'location': f"{m['turtle'].location_specific}, {m['turtle'].location_state}",
                 'distance': m['distance'],
-                'image_url': m['image_url']
+                'image_url': m['preview_image']
             })
             if len(unique_turtle_matches) >= top_k:
                 break

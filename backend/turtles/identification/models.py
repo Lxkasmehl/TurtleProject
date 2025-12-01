@@ -11,45 +11,42 @@ def generate_turtle_id():
     return random.randint(100_000, 1_000_000)
 
 
+
 def turtle_image_path(instance, filename):
-    """Generates the file path:
-    State / Specific Location / Gender+ID / Gender+ID.[Count].ext
-    Example: Kansas/Lawrence/F1/F1.[1].jpg"""
+    """Generates the file path with FORWARD SLASHES for database compatibility."""
     turtle = instance.turtle
 
     # 1. Get Folder Components
-    # Default to "Unsorted" if location is missing to prevent errors
     state = turtle.location_state if turtle.location_state else "Unsorted_State"
     specific_loc = turtle.location_specific if turtle.location_specific else "Unsorted_Location"
-    bio_id = turtle.biology_id  # e.g., "F1"
+    bio_id = turtle.biology_id
 
-    # 2. Generate Filename: F1.[1].jpg
+    # 2. Generate Filename
     ext = filename.split('.')[-1]
-
-    # Determine the increment number (count existing images + 1)
-    # Note: This is a simple count. If images are deleted, numbers might be reused
-    # or out of sync with total historical uploads, but it fits the requested format.
     count = turtle.images.count() + 1
-
     new_filename = f"{bio_id}.[{count}].{ext}"
 
-    # 3. Return full path
-    return os.path.join(state, specific_loc, bio_id, new_filename)
+    # 3. Return path using formatted string with forward slashes
+    # DO NOT use os.path.join here
+    return f"{state}/{specific_loc}/{bio_id}/{new_filename}"
 
 
 def turtle_mirror_path(instance, filename):
-    """
-    Generates the mirror file path.
-    Stores mirrors in a 'mirrors' subfolder to keep the main folder clean.
-    Example: Kansas/Lawrence/F1/mirrors/F1.[1]_mirror.jpg
-    """
-    # Re-use the logic from the main image path to get the base folder
-    original_path = turtle_image_path(instance, filename)
-    folder, name = os.path.split(original_path)
-    name_root, ext = os.path.splitext(name)
+    """Generates the mirror path with FORWARD SLASHES."""
+    # 1. Get Base Path (This now returns forward slashes)
+    original_full_path = turtle_image_path(instance, filename)
 
-    # Construct mirror path
-    return os.path.join(folder, "mirrors", f"{name_root}_mirror{ext}")
+    # 2. Split path manually to avoid OS-specific separators
+    path_parts = original_full_path.split('/')
+    folder_path = "/".join(path_parts[:-1])
+    name = path_parts[-1]
+
+    # 3. Construct Mirror Filename
+    name_root = name.rsplit('.', 1)[0]
+    ext = name.rsplit('.', 1)[1]
+
+    # 4. Return full mirror path
+    return f"{folder_path}/mirrors/{name_root}_mirror.{ext}"
 
 
 class Turtle(models.Model):
