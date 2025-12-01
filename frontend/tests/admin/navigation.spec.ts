@@ -1,6 +1,12 @@
 import { test, expect } from '@playwright/test';
 import { openMobileMenuIfPresent, loginAsAdmin, loginAsCommunity } from '../helpers';
 
+test.beforeEach(async ({ page }) => {
+  await page.addInitScript(() => {
+    localStorage.setItem('hasSeenInstructions', 'true');
+  });
+});
+
 test.describe('Admin Navigation Tests', () => {
   test.beforeEach(async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 720 });
