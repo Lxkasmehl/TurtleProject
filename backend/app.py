@@ -1,0 +1,287 @@
+"""
+Flask API Server for Turtle Project
+Handles photo uploads, matching, and review queue
+"""
+
+import os
+import json
+import time
+from flask import Flask, request, jsonify, send_file
+from flask_cors import CORS
+from werkzeug.utils import secure_filename
+import tempfile
+from turtle_manager import TurtleManager
+
+app = Flask(__name__)
+CORS(app)  # Enable CORS for frontend
+
+# Initialize Turtle Manager
+manager = TurtleManager()
+
+# Configuration
+UPLOAD_FOLDER = tempfile.gettempdir()
+ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'webp'}
+MAX_FILE_SIZE = 5 * 1024 * 1024  # 5MB
+
+def allowed_file(filename):
+    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+
+@app.route('/api/health', methods=['GET'])
+def health_check():
+    """Health check endpoint"""
+    return jsonify({'status': 'ok', 'message': 'Turtle API is running'})
+
+@app.route('/api/upload', methods=['POST'])
+def upload_photo():
+    """
+    Upload photo endpoint
+    - Admin: Process immediately and return top 5 matches
+    - Community: Save to review queue with top 5 matches
+    """
+    try:
+        if 'file' not in request.files:
+            return jsonify({'error': 'No file provided'}), 400
+        
+        file = request.files['file']
+        user_role = request.form.get('role', 'community')  # 'admin' or 'community'
+        user_email = request.form.get('email', 'anonymous')
+        
+        if file.filename == '':
+            return jsonify({'error': 'No file selected'}), 400
+        
+        if not allowed_file(file.filename):
+            return jsonify({'error': 'Invalid file type'}), 400
+        
+        # Check file size
+        file.seek(0, os.SEEK_END)
+        file_size = file.tell()
+        file.seek(0)
+        
+        if file_size > MAX_FILE_SIZE:
+            return jsonify({'error': 'File too large (max 5MB)'}), 400
+        
+        # Save file temporarily
+        filename = secure_filename(file.filename)
+        temp_path = os.path.join(UPLOAD_FOLDER, filename)
+        print(f"💾 Saving uploaded file to: {temp_path}")
+        file.save(temp_path)
+        
+        if not os.path.exists(temp_path):
+            return jsonify({'error': 'Failed to save file'}), 500
+        
+        if user_role == 'admin':
+            # Admin: Process immediately and return matches
+            print(f"🔍 Admin upload: Processing {filename}...")
+            matches = manager.search_for_matches(temp_path)
+            print(f"✅ Found {len(matches)} matches")
+            
+            # Format matches for frontend
+            formatted_matches = []
+            for match in matches:
+                formatted_matches.append({
+                    'turtle_id': match.get('site_id', 'Unknown'),
+                    'location': match.get('location', 'Unknown'),
+                    'distance': float(match.get('distance', 0)),
+                    'file_path': match.get('file_path', ''),
+                    'filename': match.get('filename', '')
+                })
+            
+            # Create a temporary request ID for this admin upload
+            request_id = f"admin_{int(time.time())}_{filename}"
+            
+            return jsonify({
+                'success': True,
+                'request_id': request_id,
+                'matches': formatted_matches,
+                'uploaded_image_path': temp_path,
+                'message': 'Photo processed successfully. Top 5 matches found.'
+            })
+        
+        else:
+            # Community: Save to review queue
+            print(f"👤 Community upload: Processing {filename}...")
+            finder_name = user_email.split('@')[0] if '@' in user_email else 'anonymous'
+            request_id = manager.create_review_packet(
+                temp_path,
+                user_info={
+                    'finder': finder_name,
+                    'email': user_email,
+                    'uploaded_at': time.time()
+                }
+            )
+            print(f"✅ Review packet created: {request_id}")
+            
+            return jsonify({
+                'success': True,
+                'request_id': request_id,
+                'message': 'Photo uploaded successfully. Waiting for admin review.'
+            })
+    
+    except Exception as e:
+        import traceback
+        error_trace = traceback.format_exc()
+        print(f"❌ Error processing upload: {str(e)}")
+        print(f"Traceback:\n{error_trace}")
+        return jsonify({
+            'error': f'Processing failed: {str(e)}',
+            'details': error_trace if app.debug else None
+        }), 500
+    
+    finally:
+        # Keep temp file for now (will be cleaned up later)
+        pass
+
+@app.route('/api/review-queue', methods=['GET'])
+def get_review_queue():
+    """
+    Get all pending review queue items (Admin only)
+    Returns list of community uploads waiting for review
+    """
+    try:
+        queue_items = manager.get_review_queue()
+        
+        # Load metadata and candidate matches for each item
+        formatted_items = []
+        for item in queue_items:
+            request_id = item['request_id']
+            packet_dir = item['path']
+            
+            # Load metadata
+            metadata_path = os.path.join(packet_dir, 'metadata.json')
+            metadata = {}
+            if os.path.exists(metadata_path):
+                with open(metadata_path, 'r') as f:
+                    metadata = json.load(f)
+            
+            # Find the uploaded image
+            uploaded_image = None
+            for f in os.listdir(packet_dir):
+                if f.lower().endswith(('.jpg', '.png', '.jpeg')) and f != 'metadata.json':
+                    uploaded_image = os.path.join(packet_dir, f)
+                    break
+            
+            # Get candidate matches
+            candidates_dir = os.path.join(packet_dir, 'candidate_matches')
+            candidates = []
+            if os.path.exists(candidates_dir):
+                for candidate_file in sorted(os.listdir(candidates_dir)):
+                    if candidate_file.lower().endswith(('.jpg', '.png', '.jpeg')):
+                        # Parse rank, ID, and score from filename: Rank1_IDT101_Score85.jpg
+                        parts = candidate_file.replace('.jpg', '').replace('.png', '').replace('.jpeg', '').split('_')
+                        rank = 0
+                        turtle_id = 'Unknown'
+                        score = 0
+                        
+                        for part in parts:
+                            if part.startswith('Rank'):
+                                rank = int(part.replace('Rank', ''))
+                            elif part.startswith('ID'):
+                                turtle_id = part.replace('ID', '')
+                            elif part.startswith('Score'):
+                                score = int(part.replace('Score', ''))
+                        
+                        candidates.append({
+                            'rank': rank,
+                            'turtle_id': turtle_id,
+                            'score': score,
+                            'image_path': os.path.join(candidates_dir, candidate_file)
+                        })
+            
+            formatted_items.append({
+                'request_id': request_id,
+                'uploaded_image': uploaded_image,
+                'metadata': metadata,
+                'candidates': sorted(candidates, key=lambda x: x['rank']),
+                'status': 'pending'
+            })
+        
+        return jsonify({
+            'success': True,
+            'items': formatted_items
+        })
+    
+    except Exception as e:
+        return jsonify({'error': f'Failed to load review queue: {str(e)}'}), 500
+
+@app.route('/api/review/<request_id>/approve', methods=['POST'])
+def approve_review(request_id):
+    """
+    Approve a review queue item (Admin only)
+    Admin selects which of the 5 matches is the correct one
+    """
+    data = request.json
+    match_turtle_id = data.get('match_turtle_id')  # The turtle ID that was selected
+    new_location = data.get('new_location')  # Optional: if creating new turtle
+    
+    try:
+        success, message = manager.approve_review_packet(
+            request_id,
+            match_turtle_id=match_turtle_id,
+            new_location=new_location
+        )
+        
+        if success:
+            return jsonify({
+                'success': True,
+                'message': message
+            })
+        else:
+            return jsonify({'error': message}), 400
+    
+    except Exception as e:
+        return jsonify({'error': f'Failed to approve review: {str(e)}'}), 500
+
+@app.route('/api/images', methods=['GET'])
+def serve_image():
+    """
+    Serve images from the file system
+    Used to display uploaded images and matches in the frontend
+    Query parameter: path=<encoded_image_path>
+    """
+    image_path = request.args.get('path')
+    if not image_path:
+        return jsonify({'error': 'No path provided'}), 400
+    
+    # Decode the path
+    try:
+        from urllib.parse import unquote
+        decoded_path = unquote(image_path)
+    except:
+        decoded_path = image_path
+    
+    # Security: Only serve images from allowed directories
+    safe_path = os.path.normpath(decoded_path)
+    
+    # Check if path is within data directory or temp directory
+    data_dir = os.path.normpath(manager.base_dir)
+    temp_dir = os.path.normpath(UPLOAD_FOLDER)
+    
+    full_path = None
+    # Check if path is absolute and within allowed directories
+    if os.path.isabs(safe_path):
+        if safe_path.startswith(data_dir) or safe_path.startswith(temp_dir):
+            if os.path.exists(safe_path) and os.path.isfile(safe_path):
+                full_path = safe_path
+    else:
+        # Relative path - try to resolve it
+        for base_dir in [data_dir, temp_dir]:
+            potential_path = os.path.normpath(os.path.join(base_dir, safe_path))
+            if os.path.exists(potential_path) and os.path.isfile(potential_path):
+                # Verify it's still within the base directory
+                if potential_path.startswith(base_dir):
+                    full_path = potential_path
+                    break
+    
+    if not full_path or not os.path.exists(full_path):
+        return jsonify({'error': 'Image not found'}), 404
+    
+    return send_file(full_path)
+
+if __name__ == '__main__':
+    print("🐢 Starting Turtle API Server...")
+    print("📁 Data directory:", manager.base_dir)
+    print("🌐 Server running on http://localhost:5000")
+    print("🔧 Debug mode: ON")
+    print("⚠️  Make sure FAISS index and vocabulary are loaded!")
+    app.run(debug=True, host='0.0.0.0', port=5000)
+

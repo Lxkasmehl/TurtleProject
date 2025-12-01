@@ -2,7 +2,12 @@
  * API Service for backend communication
  */
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001/api';
+// Auth Backend API URL - Node.js/Express server runs on port 3001
+const AUTH_API_BASE_URL =
+  import.meta.env.VITE_AUTH_API_URL || 'http://localhost:3001/api';
+
+// Turtle Backend API URL - Flask server runs on port 5000
+const TURTLE_API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
 
 export interface User {
   id: number;
@@ -44,22 +49,22 @@ export const removeToken = (): void => {
   localStorage.removeItem('auth_token');
 };
 
-// Make authenticated API request
+// Make authenticated API request to Auth Backend
 export const apiRequest = async (
   endpoint: string,
   options: RequestInit = {}
 ): Promise<Response> => {
   const token = getToken();
-  const headers: HeadersInit = {
+  const headers: Record<string, string> = {
     'Content-Type': 'application/json',
-    ...options.headers,
+    ...(options.headers as Record<string, string>),
   };
 
   if (token) {
     headers['Authorization'] = `Bearer ${token}`;
   }
 
-  const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+  const response = await fetch(`${AUTH_API_BASE_URL}${endpoint}`, {
     ...options,
     headers,
   });
@@ -68,9 +73,7 @@ export const apiRequest = async (
 };
 
 // Register new user
-export const register = async (
-  data: RegisterRequest
-): Promise<AuthResponse> => {
+export const register = async (data: RegisterRequest): Promise<AuthResponse> => {
   const response = await apiRequest('/auth/register', {
     method: 'POST',
     body: JSON.stringify(data),
@@ -138,7 +141,7 @@ export const logout = async (): Promise<void> => {
 
 // Google OAuth URL
 export const getGoogleAuthUrl = (): string => {
-  return `${API_BASE_URL.replace('/api', '')}/api/auth/google`;
+  return `${AUTH_API_BASE_URL.replace('/api', '')}/api/auth/google`;
 };
 
 // Get invitation details by token
@@ -188,3 +191,122 @@ export const promoteToAdmin = async (email: string): Promise<PromoteToAdminRespo
   return await response.json();
 };
 
+// --- Turtle Photo Upload & Matching API ---
+
+export interface TurtleMatch {
+  turtle_id: string;
+  location: string;
+  distance: number;
+  file_path: string;
+  filename: string;
+}
+
+export interface UploadPhotoResponse {
+  success: boolean;
+  request_id?: string;
+  matches?: TurtleMatch[];
+  uploaded_image_path?: string;
+  message: string;
+}
+
+export interface ReviewQueueItem {
+  request_id: string;
+  uploaded_image: string;
+  metadata: {
+    finder?: string;
+    email?: string;
+    uploaded_at?: number;
+  };
+  candidates: Array<{
+    rank: number;
+    turtle_id: string;
+    score: number;
+    image_path: string;
+  }>;
+  status: string;
+}
+
+export interface ReviewQueueResponse {
+  success: boolean;
+  items: ReviewQueueItem[];
+}
+
+export interface ApproveReviewRequest {
+  match_turtle_id?: string;
+  new_location?: string;
+}
+
+export interface ApproveReviewResponse {
+  success: boolean;
+  message: string;
+}
+
+// Upload photo (Admin or Community)
+export const uploadTurtlePhoto = async (
+  file: File,
+  role: 'admin' | 'community',
+  email: string
+): Promise<UploadPhotoResponse> => {
+  const formData = new FormData();
+  formData.append('file', file);
+  formData.append('role', role);
+  formData.append('email', email);
+
+  const response = await fetch(`${TURTLE_API_BASE_URL}/upload`, {
+    method: 'POST',
+    body: formData,
+  });
+
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.error || 'Upload failed');
+  }
+
+  return await response.json();
+};
+
+// Get review queue (Admin only)
+export const getReviewQueue = async (): Promise<ReviewQueueResponse> => {
+  const response = await fetch(`${TURTLE_API_BASE_URL}/review-queue`, {
+    method: 'GET',
+  });
+
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.error || 'Failed to load review queue');
+  }
+
+  return await response.json();
+};
+
+// Approve review item (Admin only)
+export const approveReview = async (
+  requestId: string,
+  data: ApproveReviewRequest
+): Promise<ApproveReviewResponse> => {
+  const response = await fetch(`${TURTLE_API_BASE_URL}/review/${requestId}/approve`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(data),
+  });
+
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.error || 'Failed to approve review');
+  }
+
+  return await response.json();
+};
+
+// Get image URL helper
+export const getImageUrl = (imagePath: string): string => {
+  // Convert file path to API endpoint
+  if (imagePath.startsWith('http')) {
+    return imagePath;
+  }
+  // For local paths, encode them as query parameter
+  const encodedPath = encodeURIComponent(imagePath);
+  return `${TURTLE_API_BASE_URL.replace('/api', '')}/api/images?path=${encodedPath}`;
+};

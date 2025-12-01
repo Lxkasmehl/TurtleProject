@@ -2,7 +2,9 @@ import { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { notifications } from '@mantine/notifications';
 import { IconCheck, IconAlertCircle } from '@tabler/icons-react';
-import { uploadPhoto, validateFile, getCurrentLocation } from '../services/mockBackend';
+import { validateFile, getCurrentLocation } from '../services/mockBackend';
+import { uploadTurtlePhoto, type UploadPhotoResponse } from '../services/api';
+import { useUser } from './useUser';
 import type { FileWithPath } from '@mantine/dropzone';
 
 type UploadState = 'idle' | 'uploading' | 'success' | 'error';
@@ -32,6 +34,7 @@ export function usePhotoUpload({
   onSuccess,
 }: UsePhotoUploadOptions = {}): UsePhotoUploadReturn {
   const navigate = useNavigate();
+  const { user } = useUser();
   const [files, setFiles] = useState<FileWithPath[]>([]);
   const [preview, setPreview] = useState<string | null>(null);
   const [uploadState, setUploadState] = useState<UploadState>('idle');
@@ -128,8 +131,18 @@ export function usePhotoUpload({
         setIsGettingLocation(false);
       }
 
-      // For admin, check for duplicates
-      const response = await uploadPhoto(file, role === 'admin', location);
+      // Upload to backend API
+      const userRole: 'admin' | 'community' =
+        (role === 'admin' || role === 'community' ? role : null) ||
+        (user?.role === 'admin' || user?.role === 'community' ? user.role : null) ||
+        'community';
+      const userEmail = user?.email || 'anonymous@example.com';
+
+      const response: UploadPhotoResponse = await uploadTurtlePhoto(
+        file,
+        userRole,
+        userEmail
+      );
 
       // Clear interval and set to 100%
       if (progressIntervalRef.current) {
@@ -139,21 +152,35 @@ export function usePhotoUpload({
       setUploadProgress(100);
 
       if (response.success) {
-        // If duplicate detected and admin, navigate to match page
-        if (response.isDuplicate && role === 'admin' && response.duplicateImageId) {
-          // Navigate to turtle match page
-          navigate(`/admin/turtle-match/${response.duplicateImageId}`);
+        // Admin: If matches found, save match data and navigate to match page
+        if (
+          userRole === 'admin' &&
+          response.matches &&
+          response.matches.length > 0 &&
+          response.request_id
+        ) {
+          // Save match data to localStorage for the match page
+          const matchData = {
+            request_id: response.request_id,
+            uploaded_image_path: response.uploaded_image_path || '',
+            matches: response.matches,
+          };
+          localStorage.setItem(`match_${response.request_id}`, JSON.stringify(matchData));
+
+          // Navigate to turtle match page with request_id
+          navigate(`/admin/turtle-match/${response.request_id}`);
           return;
         }
 
+        // Community or admin without matches: Show success message
         setUploadState('success');
         setUploadResponse(response.message);
-        setImageId(response.imageId || null);
-        setIsDuplicate(response.isDuplicate || false);
-        setPreviousUploadDate(response.previousUploadDate || null);
+        setImageId(response.request_id || null);
+        setIsDuplicate(false);
+        setPreviousUploadDate(null);
 
-        if (response.imageId && onSuccess) {
-          onSuccess(response.imageId);
+        if (response.request_id && onSuccess) {
+          onSuccess(response.request_id);
         }
 
         notifications.show({
@@ -164,7 +191,7 @@ export function usePhotoUpload({
           autoClose: 5000,
         });
       } else {
-        throw new Error(response.message);
+        throw new Error(response.message || 'Upload failed');
       }
     } catch (error: unknown) {
       // Clear interval on error

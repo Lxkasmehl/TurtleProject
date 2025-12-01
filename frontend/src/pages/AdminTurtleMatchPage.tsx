@@ -11,20 +11,30 @@ import {
   Loader,
   Button,
   Alert,
+  Image,
+  Card,
 } from '@mantine/core';
-import { IconPhoto, IconCheck, IconArrowLeft, IconRecycle } from '@tabler/icons-react';
+import { IconPhoto, IconCheck, IconArrowLeft } from '@tabler/icons-react';
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { getDuplicatePhotosByImageId, type UploadedPhoto } from '../services/mockBackend';
 import { useUser } from '../hooks/useUser';
-import { PhotoCard } from '../components/PhotoCard';
+import { type TurtleMatch, getImageUrl, approveReview } from '../services/api';
+import { notifications } from '@mantine/notifications';
+
+interface MatchData {
+  request_id: string;
+  uploaded_image_path: string;
+  matches: TurtleMatch[];
+}
 
 export default function AdminTurtleMatchPage() {
   const { role } = useUser();
   const navigate = useNavigate();
   const { imageId } = useParams<{ imageId: string }>();
-  const [photos, setPhotos] = useState<UploadedPhoto[]>([]);
+  const [matchData, setMatchData] = useState<MatchData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [selectedMatch, setSelectedMatch] = useState<string | null>(null);
+  const [processing, setProcessing] = useState(false);
 
   useEffect(() => {
     // Check if user is admin
@@ -33,31 +43,76 @@ export default function AdminTurtleMatchPage() {
       return;
     }
 
-    // Load duplicate photos
-    const loadPhotos = () => {
+    // Load match data from localStorage (saved during upload)
+    const loadMatchData = () => {
       setLoading(true);
       try {
         if (imageId) {
-          const duplicatePhotos = getDuplicatePhotosByImageId(imageId);
-          // Sort by timestamp (newest first)
-          duplicatePhotos.sort((a, b) => {
-            return new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime();
-          });
-          setPhotos(duplicatePhotos);
+          const stored = localStorage.getItem(`match_${imageId}`);
+          if (stored) {
+            const data: MatchData = JSON.parse(stored);
+            setMatchData(data);
+          } else {
+            // If not found, show error
+            console.error('Match data not found for:', imageId);
+          }
         }
       } catch (error) {
-        console.error('Error loading duplicate photos:', error);
+        console.error('Error loading match data:', error);
       } finally {
         setLoading(false);
       }
     };
 
-    loadPhotos();
+    loadMatchData();
   }, [imageId, role, navigate]);
 
-  const handlePhotoClick = (photo: UploadedPhoto) => {
-    // Could open a modal here if needed
-    console.log('Photo clicked:', photo);
+  const handleSelectMatch = (turtleId: string) => {
+    setSelectedMatch(turtleId);
+  };
+
+  const handleConfirmMatch = async () => {
+    if (!selectedMatch || !imageId) {
+      notifications.show({
+        title: 'Error',
+        message: 'Please select a match first',
+        color: 'red',
+      });
+      return;
+    }
+
+    setProcessing(true);
+    try {
+      await approveReview(imageId, {
+        match_turtle_id: selectedMatch,
+      });
+
+      // Remove from localStorage
+      localStorage.removeItem(`match_${imageId}`);
+
+      notifications.show({
+        title: 'Success!',
+        message: 'Match confirmed successfully',
+        color: 'green',
+        icon: <IconCheck size={18} />,
+      });
+
+      // Navigate back to home
+      navigate('/');
+    } catch (error) {
+      notifications.show({
+        title: 'Error',
+        message: error instanceof Error ? error.message : 'Failed to confirm match',
+        color: 'red',
+      });
+    } finally {
+      setProcessing(false);
+    }
+  };
+
+  const handleSkip = () => {
+    // Navigate back without confirming
+    navigate('/');
   };
 
   if (role !== 'admin') {
@@ -80,34 +135,24 @@ export default function AdminTurtleMatchPage() {
                   Back to Upload
                 </Button>
                 <div>
-                  <Title order={1}>Turtle Match Found! 🐢</Title>
+                  <Title order={1}>Select Best Match 🐢</Title>
                   <Text size='sm' c='dimmed' mt='xs'>
-                    This turtle has been sighted multiple times
+                    Review the top 5 matches and select the correct turtle
                   </Text>
                 </div>
               </Group>
-              <Badge
-                size='lg'
-                variant='light'
-                color='green'
-                leftSection={<IconRecycle size={14} />}
-              >
-                {photos.length} {photos.length === 1 ? 'Sighting' : 'Sightings'}
+              <Badge size='lg' variant='light' color='blue'>
+                {matchData?.matches.length || 0} Matches Found
               </Badge>
             </Group>
           </Stack>
         </Paper>
 
-        {/* Success Alert */}
-        <Alert
-          icon={<IconCheck size={18} />}
-          title='Turtle Identified!'
-          color='green'
-          radius='md'
-        >
+        {/* Info Alert */}
+        <Alert title='Select the Best Match' color='blue' radius='md'>
           <Text size='sm'>
-            This photo matches a turtle that has been previously identified. Below are all
-            the sightings of this turtle, including when and where they were uploaded.
+            The system found {matchData?.matches.length || 0} potential matches. Please
+            review each one and select the turtle that best matches the uploaded photo.
           </Text>
         </Alert>
 
@@ -116,39 +161,119 @@ export default function AdminTurtleMatchPage() {
           <Center py='xl'>
             <Loader size='lg' />
           </Center>
-        ) : photos.length === 0 ? (
+        ) : !matchData || !matchData.matches || matchData.matches.length === 0 ? (
           <Paper shadow='sm' p='xl' radius='md' withBorder>
             <Center py='xl'>
               <Stack gap='md' align='center'>
                 <IconPhoto size={64} stroke={1.5} style={{ opacity: 0.3 }} />
                 <Text size='lg' c='dimmed' ta='center'>
-                  No photos found
+                  No matches found
                 </Text>
                 <Text size='sm' c='dimmed' ta='center'>
-                  The photo ID could not be found
+                  The uploaded photo could not be matched to any existing turtles
                 </Text>
+                <Button onClick={handleSkip} variant='light'>
+                  Go Back
+                </Button>
               </Stack>
             </Center>
           </Paper>
         ) : (
-          <Grid gutter='md'>
-            {photos.map((photo, index) => (
-              <Grid.Col key={photo.imageId} span={{ base: 12, md: 6 }}>
-                <Stack gap='xs'>
-                  {index === 0 && (
-                    <Badge color='green' leftSection={<IconCheck size={12} />} size='lg'>
-                      Most Recent
-                    </Badge>
-                  )}
-                  <PhotoCard
-                    photo={photo}
-                    onPhotoClick={handlePhotoClick}
-                    showViewAllButton={false}
-                  />
-                </Stack>
-              </Grid.Col>
-            ))}
-          </Grid>
+          <>
+            {/* Uploaded Image */}
+            <Paper shadow='sm' p='md' radius='md' withBorder>
+              <Stack gap='sm'>
+                <Text fw={500}>Uploaded Photo</Text>
+                <Image
+                  src={
+                    matchData.uploaded_image_path
+                      ? getImageUrl(matchData.uploaded_image_path)
+                      : ''
+                  }
+                  alt='Uploaded photo'
+                  radius='md'
+                  style={{ maxHeight: '300px', objectFit: 'contain' }}
+                />
+              </Stack>
+            </Paper>
+
+            {/* Matches */}
+            <Paper shadow='sm' p='md' radius='md' withBorder>
+              <Stack gap='md'>
+                <Text fw={500} size='lg'>
+                  Top 5 Matches (Select the best one)
+                </Text>
+                <Grid gutter='md'>
+                  {matchData.matches.map((match, index) => (
+                    <Grid.Col
+                      key={`${match.turtle_id}-${index}`}
+                      span={{ base: 12, md: 6 }}
+                    >
+                      <Card
+                        shadow='sm'
+                        padding='md'
+                        radius='md'
+                        withBorder
+                        style={{
+                          cursor: 'pointer',
+                          border:
+                            selectedMatch === match.turtle_id
+                              ? '2px solid #228be6'
+                              : '1px solid #dee2e6',
+                          backgroundColor:
+                            selectedMatch === match.turtle_id ? '#e7f5ff' : 'white',
+                        }}
+                        onClick={() => handleSelectMatch(match.turtle_id)}
+                      >
+                        <Stack gap='sm'>
+                          <Group justify='space-between'>
+                            <Badge
+                              color={selectedMatch === match.turtle_id ? 'blue' : 'gray'}
+                              size='lg'
+                            >
+                              Rank {index + 1}
+                            </Badge>
+                            {selectedMatch === match.turtle_id && (
+                              <IconCheck size={20} color='#228be6' />
+                            )}
+                          </Group>
+                          <Text fw={500}>Turtle ID: {match.turtle_id}</Text>
+                          <Text size='sm' c='dimmed'>
+                            Location: {match.location}
+                          </Text>
+                          <Text size='sm' c='dimmed'>
+                            Distance: {match.distance.toFixed(4)}
+                          </Text>
+                          {match.file_path && (
+                            <Image
+                              src={getImageUrl(match.file_path)}
+                              alt={`Match ${index + 1}`}
+                              radius='md'
+                              style={{ maxHeight: '200px', objectFit: 'contain' }}
+                            />
+                          )}
+                        </Stack>
+                      </Card>
+                    </Grid.Col>
+                  ))}
+                </Grid>
+              </Stack>
+            </Paper>
+
+            {/* Action Buttons */}
+            <Group justify='flex-end' gap='md'>
+              <Button variant='light' onClick={handleSkip} disabled={processing}>
+                Skip
+              </Button>
+              <Button
+                onClick={handleConfirmMatch}
+                disabled={!selectedMatch || processing}
+                loading={processing}
+              >
+                Confirm Match
+              </Button>
+            </Group>
+          </>
         )}
       </Stack>
     </Container>
