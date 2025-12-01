@@ -23,7 +23,7 @@ test.describe('Admin Turtle Match Page Tests', () => {
     await loginAsAdmin(page);
 
     // Upload a test photo
-    const fileInput = page.locator('input[type="file"]');
+    const fileInput = page.locator('input[type="file"]:not([capture])').first();
     const filePath = await page.evaluate(() => {
       const canvas = document.createElement('canvas');
       canvas.width = 100;
@@ -82,7 +82,7 @@ test.describe('Admin Turtle Match Page Tests', () => {
     await loginAsAdmin(page);
 
     // Upload a photo and get ID
-    const fileInput = page.locator('input[type="file"]');
+    const fileInput = page.locator('input[type="file"]:not([capture])').first();
     const filePath = await page.evaluate(() => {
       const canvas = document.createElement('canvas');
       canvas.width = 100;
@@ -135,7 +135,7 @@ test.describe('Admin Turtle Match Page Tests', () => {
     await loginAsAdmin(page);
 
     // Upload first photo
-    const fileInput = page.locator('input[type="file"]');
+    const fileInput = page.locator('input[type="file"]:not([capture])').first();
     const filePath = await page.evaluate(() => {
       const canvas = document.createElement('canvas');
       canvas.width = 100;
@@ -170,7 +170,7 @@ test.describe('Admin Turtle Match Page Tests', () => {
     await page.reload();
 
     // Get fresh file input locator after reload
-    const fileInput2 = page.locator('input[type="file"]');
+    const fileInput2 = page.locator('input[type="file"]:not([capture])').first();
     await fileInput2.setInputFiles({
       name: 'duplicate-photo.png',
       mimeType: 'image/png',
@@ -202,7 +202,7 @@ test.describe('Admin Turtle Match Page Tests', () => {
     await loginAsAdmin(page);
 
     // Upload a photo
-    const fileInput = page.locator('input[type="file"]');
+    const fileInput = page.locator('input[type="file"]:not([capture])').first();
     const filePath = await page.evaluate(() => {
       const canvas = document.createElement('canvas');
       canvas.width = 100;
@@ -271,7 +271,7 @@ test.describe('Admin Turtle Match Page Tests', () => {
     await loginAsAdmin(page);
 
     // Upload a photo
-    const fileInput = page.locator('input[type="file"]');
+    const fileInput = page.locator('input[type="file"]:not([capture])').first();
     const filePath = await page.evaluate(() => {
       const canvas = document.createElement('canvas');
       canvas.width = 100;
@@ -337,7 +337,7 @@ test.describe('Admin Turtle Match Page Tests', () => {
     await loginAsAdmin(page);
 
     // Upload a photo
-    const fileInput = page.locator('input[type="file"]');
+    const fileInput = page.locator('input[type="file"]:not([capture])').first();
     const filePath = await page.evaluate(() => {
       const canvas = document.createElement('canvas');
       canvas.width = 100;
