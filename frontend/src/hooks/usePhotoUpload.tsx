@@ -2,7 +2,8 @@ import { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { notifications } from '@mantine/notifications';
 import { IconCheck, IconAlertCircle } from '@tabler/icons-react';
-import { uploadPhoto, validateFile, getCurrentLocation } from '../services/mockBackend';
+import { validateFile, getCurrentLocation } from '../services/mockBackend';
+import { BACKEND_IP } from '../utils/imageUtils'; 
 import type { FileWithPath } from '@mantine/dropzone';
 
 type UploadState = 'idle' | 'uploading' | 'success' | 'error';
@@ -140,7 +141,7 @@ export function usePhotoUpload({
       }
 
       // 3. Send to Django Backend
-      const response = await fetch('http://192.168.1.68:8000/api/identify/upload/', {
+      const response = await fetch(`http://${BACKEND_IP}:8000/api/identify/upload/`, {
         method: 'POST',
         body: formData,
         // Fetch automatically sets the Content-Type to multipart/form-data with the boundary
@@ -179,26 +180,37 @@ export function usePhotoUpload({
           return;
       }
 
-      if (data.imageId && onSuccess) {
-        onSuccess(data.imageId);
+      // --- LOGIC FIX HERE ---
+      
+      // Case 1: We got an Image ID (Immediate Success)
+      if (data.imageId) {
+        if (onSuccess) onSuccess(data.imageId);
+
         notifications.show({
-          title: 'Upload Successful!',
-          message: response.message,
+          title: 'Upload Successful! 🎉',
+          message: data.message || 'Image accepted by server.',
           color: 'green',
           icon: <IconCheck size={18} />,
           autoClose: 5000,
         });
-      } else {
-        throw new Error(response.message);
+      } 
+      // Case 2: No Image ID, but we got a success message (e.g. Review Queue)
+      else if (data.message) {
+        notifications.show({
+          title: 'Upload Received', 
+          message: data.message,
+          color: 'blue', // Blue indicates info/processing rather than error
+          icon: <IconCheck size={18} />,
+          autoClose: 5000,
+        });
+        
+        // Optional: Reset form here if you want the user to be able to upload again immediately
+        // handleRemove(); 
       }
-
-      notifications.show({
-        title: 'Upload Successful! 🎉',
-        message: data.message || 'Image accepted by server and processing started.',
-        color: 'green',
-        icon: <IconCheck size={18} />,
-        autoClose: 5000,
-      });
+      // Case 3: Neither ID nor Message (Actual Failure)
+      else {
+        throw new Error('Upload failed: Server returned no ID and no message');
+      }
 
     } catch (error: unknown) {
       // Clear interval on error

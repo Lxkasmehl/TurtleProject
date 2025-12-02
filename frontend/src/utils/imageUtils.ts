@@ -1,7 +1,7 @@
 // src/utils/imageUtils.ts
 
 // CHANGE THIS IP if your backend computer's IP changes
-export const BACKEND_IP = '192.168.1.68'; 
+export const BACKEND_IP = '172.18.113.90'; 
 
 export const getAccessibleImageUrl = (url: string) => {
   if (!url) return '';
