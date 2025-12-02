@@ -89,10 +89,20 @@ export default function AdminTurtleMatchPage() {
       return;
     }
 
+    if (!matchData?.uploaded_image_path) {
+      notifications.show({
+        title: 'Error',
+        message: 'Missing image path',
+        color: 'red',
+      });
+      return;
+    }
+
     setProcessing(true);
     try {
       await approveReview(imageId, {
         match_turtle_id: selectedMatch,
+        uploaded_image_path: matchData.uploaded_image_path,
       });
 
       // Remove from localStorage
