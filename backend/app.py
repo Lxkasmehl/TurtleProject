@@ -26,6 +26,27 @@ MAX_FILE_SIZE = 5 * 1024 * 1024  # 5MB
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
+def convert_npz_to_image_path(npz_path):
+    """
+    Convert a .npz file path to the corresponding image file path.
+    Tries common image extensions (.jpg, .jpeg, .png).
+    Returns the image path if found, otherwise returns the original npz_path.
+    """
+    if not npz_path or not npz_path.endswith('.npz'):
+        return npz_path
+    
+    # Try to find the corresponding image file
+    base_path = npz_path[:-4]  # Remove .npz extension
+    image_extensions = ['.jpg', '.jpeg', '.png', '.gif', '.webp']
+    
+    for ext in image_extensions:
+        image_path = base_path + ext
+        if os.path.exists(image_path) and os.path.isfile(image_path):
+            return image_path
+    
+    # If no image found, return original (might be an error case)
+    return npz_path
+
 @app.route('/api/health', methods=['GET'])
 def health_check():
     """Health check endpoint"""
@@ -80,11 +101,15 @@ def upload_photo():
             # Format matches for frontend
             formatted_matches = []
             for match in matches:
+                # Convert .npz path to image path
+                npz_path = match.get('file_path', '')
+                image_path = convert_npz_to_image_path(npz_path)
+                
                 formatted_matches.append({
                     'turtle_id': match.get('site_id', 'Unknown'),
                     'location': match.get('location', 'Unknown'),
                     'distance': float(match.get('distance', 0)),
-                    'file_path': match.get('file_path', ''),
+                    'file_path': image_path,  # Now contains image path, not .npz path
                     'filename': match.get('filename', '')
                 })
             
