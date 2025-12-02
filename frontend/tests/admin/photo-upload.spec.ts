@@ -46,7 +46,7 @@ test.describe('Admin Photo Upload with Duplicate Detection Tests', () => {
       return canvas.toDataURL('image/png');
     });
 
-    const fileInput = page.locator('input[type="file"]');
+    const fileInput = page.locator('input[type="file"]:not([capture])').first();
 
     // Upload first photo
     await fileInput.setInputFiles({
@@ -107,7 +107,7 @@ test.describe('Admin Photo Upload with Duplicate Detection Tests', () => {
       return canvas.toDataURL('image/png');
     });
 
-    const fileInput = page.locator('input[type="file"]');
+    const fileInput = page.locator('input[type="file"]:not([capture])').first();
     await fileInput.setInputFiles({
       name: 'new-turtle.png',
       mimeType: 'image/png',
@@ -148,7 +148,7 @@ test.describe('Admin Photo Upload with Duplicate Detection Tests', () => {
       return canvas.toDataURL('image/png');
     });
 
-    const fileInput = page.locator('input[type="file"]');
+    const fileInput = page.locator('input[type="file"]:not([capture])').first();
 
     // Upload first time
     await fileInput.setInputFiles({
@@ -205,7 +205,7 @@ test.describe('Admin Photo Upload with Duplicate Detection Tests', () => {
       return canvas.toDataURL('image/png');
     });
 
-    const fileInput = page.locator('input[type="file"]');
+    const fileInput = page.locator('input[type="file"]:not([capture])').first();
     await fileInput.setInputFiles({
       name: 'new-photo.png',
       mimeType: 'image/png',
@@ -244,7 +244,7 @@ test.describe('Admin Photo Upload with Duplicate Detection Tests', () => {
       return canvas.toDataURL('image/png');
     });
 
-    const fileInput = page.locator('input[type="file"]');
+    const fileInput = page.locator('input[type="file"]:not([capture])').first();
     await fileInput.setInputFiles({
       name: 'progress-test.png',
       mimeType: 'image/png',
@@ -281,7 +281,7 @@ test.describe('Admin Photo Upload with Duplicate Detection Tests', () => {
       return canvas.toDataURL('image/png');
     });
 
-    const fileInput = page.locator('input[type="file"]');
+    const fileInput = page.locator('input[type="file"]:not([capture])').first();
     await fileInput.setInputFiles({
       name: 'records-test.png',
       mimeType: 'image/png',
@@ -330,7 +330,7 @@ test.describe('Admin Photo Upload with Duplicate Detection Tests', () => {
       return canvas.toDataURL('image/png');
     });
 
-    const fileInput = page.locator('input[type="file"]');
+    const fileInput = page.locator('input[type="file"]:not([capture])').first();
 
     // Upload first
     await fileInput.setInputFiles({
