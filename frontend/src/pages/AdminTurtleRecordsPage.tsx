@@ -28,23 +28,22 @@ import {
   IconTrash, 
   IconDeviceFloppy,
   IconArrowRight,
-  IconCheck
 } from '@tabler/icons-react';
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
-// --- Services & Hooks ---
+// --- IMPORTS ---
+import { getAccessibleImageUrl, BACKEND_IP } from '../utils/imageUtils'; // <--- NEW IMPORT
 import { getAllUploadedPhotos, type UploadedPhoto } from '../services/mockBackend';
 import { useUser } from '../hooks/useUser';
 import { usePhotoGroups } from '../hooks/usePhotoGroups';
 import { TurtleService } from '../services/turtleService';
 import type { TurtleRecord } from '../types/turtle';
 
-// --- Components ---
 import { PhotoDetailModal } from '../components/PhotoDetailModal';
 import { PhotoGroupCard } from '../components/PhotoGroupCard';
 
-// --- TYPES FOR MATCHING API ---
+// --- TYPES ---
 interface PotentialMatch {
   turtle_id: number;
   biology_id: string; 
@@ -61,51 +60,20 @@ interface QueueItem {
   matches: PotentialMatch[];
 }
 
-// --- HELPER: Fix Image URLs from Backend ---
-const getAccessibleImageUrl = (url: string) => {
-  if (!url) return '';
-  
-  const backendIp = '192.168.1.68';
-  const backendBase = `http://${backendIp}:8000`;
-
-  // LOGGING: Let's see exactly what we are fixing
-  console.log(`🖼️ Raw Image URL from Backend:`, url);
-
-  // CASE 1: Backend sends a relative path (e.g. "/media/img.jpg")
-  // We must prepend the backend IP.
-  if (url.startsWith('/')) {
-    return `${backendBase}${url}`;
-  }
-
-  // CASE 2: Backend sends a full URL with localhost/127.0.0.1
-  // We must swap it for the LAN IP.
-  if (url.includes('127.0.0.1:8000')) {
-    return url.replace('127.0.0.1:8000', `${backendIp}:8000`);
-  }
-  if (url.includes('localhost:8000')) {
-    return url.replace('localhost:8000', `${backendIp}:8000`);
-  }
-
-  // CASE 3: It's already correct or unknown, return as is
-  return url;
-};
-
 export default function AdminTurtleRecordsPage() {
   const { role } = useUser();
   const navigate = useNavigate();
   
-  // --- STATE: Photo Gallery ---
+  // --- STATE ---
   const [photos, setPhotos] = useState<UploadedPhoto[]>([]);
   const [photosLoading, setPhotosLoading] = useState(true);
   const [selectedPhoto, setSelectedPhoto] = useState<UploadedPhoto | null>(null);
   const [photoModalOpened, { open: openPhotoModal, close: closePhotoModal }] = useDisclosure(false);
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
 
-  // --- STATE: Data Table ---
   const [records, setRecords] = useState<TurtleRecord[]>([]);
   const [recordsLoading, setRecordsLoading] = useState(false);
 
-  // --- STATE: Matching Workflow ---
   const [currentQueueItem, setCurrentQueueItem] = useState<QueueItem | null>(null);
   const [selectedOptionValue, setSelectedOptionValue] = useState<string | null>(null); 
   const [activeUploadId, setActiveUploadId] = useState<number | null>(null);
@@ -148,7 +116,7 @@ export default function AdminTurtleRecordsPage() {
     setRecords(updated);
   };
 
-  // --- API LOGIC: Fetch Next from Queue ---
+  // --- API LOGIC: Fetch Next ---
   const fetchNextTurtle = async () => {
     setRecordsLoading(true);
     setRecords([]); 
@@ -157,7 +125,8 @@ export default function AdminTurtleRecordsPage() {
     setActiveUploadId(null); 
 
     try {
-      const response = await fetch('http://192.168.1.68:8000/api/identify/queue/next/');
+      // Using the variable from utils file
+      const response = await fetch(`http://${BACKEND_IP}:8000/api/identify/queue/next/`);
       
       if (!response.ok) {
         if (response.status === 404) {
@@ -173,7 +142,7 @@ export default function AdminTurtleRecordsPage() {
 
     } catch (error) {
       console.error("Failed to fetch next item:", error);
-      alert("Failed to fetch next item from queue. Is the backend running?");
+      alert("Failed to fetch next item. Is the backend running?");
     } finally {
       setRecordsLoading(false);
     }
@@ -221,51 +190,50 @@ export default function AdminTurtleRecordsPage() {
     setCurrentQueueItem(null); 
   };
 
-  // --- API LOGIC: Resolve Queue Item ---
-const handleSaveData = async (recordToSave: TurtleRecord) => {
-  if (!activeUploadId) {
-      alert("Error: No active upload ID found.");
+  // --- API LOGIC: Resolve/Save ---
+  const handleSaveData = async (recordToSave: TurtleRecord) => {
+    if (!activeUploadId) {
+        alert("Error: No active upload ID found.");
+        return;
+    }
+
+    if (!window.confirm(`Finalize this record as Turtle ID: ${recordToSave.id}?`)) {
       return;
-  }
-
-  if (!window.confirm(`Finalize this record as Turtle ID: ${recordToSave.id}?`)) {
-    return;
-  }
-  
-  try {
-    setRecordsLoading(true); 
-    
-    // UPDATED PAYLOAD: Now includes sex and site
-    const payload = {
-        turtle_id: parseInt(recordToSave.id, 10),
-        sex: recordToSave.sex,             // <--- NEW: Sends the sex field
-        site: recordToSave.originalSite    // <--- NEW: Sends the site field
-    };
-
-    console.log(`Sending Review Decision to Backend:`, payload);
-
-    const response = await fetch(`http://192.168.1.68:8000/api/identify/review/`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-    });
-
-    if (!response.ok) {
-        throw new Error(`Backend error: ${response.status}`);
     }
     
-    alert(`Success! Upload resolved to Turtle ID: ${recordToSave.id}`);
+    try {
+      setRecordsLoading(true); 
+      
+      const payload = {
+          turtle_id: parseInt(recordToSave.id, 10),
+          sex: recordToSave.sex,
+          site: recordToSave.originalSite
+      };
 
-    setRecords([]); 
-    setActiveUploadId(null);
+      console.log(`Sending Review Decision to Backend:`, payload);
 
-  } catch (error) {
-    console.error("Save failed:", error);
-    alert("Save failed. Check console.");
-  } finally {
-    setRecordsLoading(false);
-  }
-};
+      const response = await fetch(`http://${BACKEND_IP}:8000/api/identify/review/`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+      });
+
+      if (!response.ok) {
+          throw new Error(`Backend error: ${response.status}`);
+      }
+      
+      alert(`Success! Upload resolved to Turtle ID: ${recordToSave.id}`);
+
+      setRecords([]); 
+      setActiveUploadId(null);
+
+    } catch (error) {
+      console.error("Save failed:", error);
+      alert("Save failed. Check console.");
+    } finally {
+      setRecordsLoading(false);
+    }
+  };
 
   const deleteRow = (index: number) => {
     if (window.confirm('Discard this record locally?')) {
@@ -426,12 +394,13 @@ const handleSaveData = async (recordToSave: TurtleRecord) => {
                 </Button>
             </Group>
 
-            {/* ACTION BUTTONS: Save and Discard (Large & Prominent) */}
-            <Group justify="flex-end" mb="md" gap="sm">
+            {/* ACTION BUTTONS: MOVED TO TOP RIGHT & LARGER */}
+            <Group justify="flex-end" mb="md" gap="md">
                 <Button 
                     color="red" 
                     variant="light" 
-                    leftSection={<IconTrash size={16}/>} 
+                    size="md" // Made larger
+                    leftSection={<IconTrash size={20}/>} 
                     onClick={() => deleteRow(0)}
                     disabled={!activeRecord}
                 >
@@ -440,8 +409,8 @@ const handleSaveData = async (recordToSave: TurtleRecord) => {
                 <Button 
                     color="teal" 
                     variant="filled" 
-                    size="sm"
-                    leftSection={<IconDeviceFloppy size={18}/>} 
+                    size="md" // Made larger
+                    leftSection={<IconDeviceFloppy size={20}/>} 
                     onClick={() => handleSaveData(activeRecord)}
                     disabled={!activeRecord}
                     loading={recordsLoading}
