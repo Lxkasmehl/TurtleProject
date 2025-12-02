@@ -181,6 +181,15 @@ export function usePhotoUpload({
 
       if (data.imageId && onSuccess) {
         onSuccess(data.imageId);
+        notifications.show({
+          title: 'Upload Successful!',
+          message: response.message,
+          color: 'green',
+          icon: <IconCheck size={18} />,
+          autoClose: 5000,
+        });
+      } else {
+        throw new Error(response.message);
       }
 
       notifications.show({

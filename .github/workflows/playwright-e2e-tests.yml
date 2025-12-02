@@ -19,16 +19,66 @@ jobs:
           cache: "npm"
           cache-dependency-path: frontend/package-lock.json
 
-      - name: Install dependencies
+      - name: Install frontend dependencies
         working-directory: ./frontend
+        run: npm ci
+
+      - name: Install auth-backend dependencies
+        working-directory: ./auth-backend
         run: npm ci
 
       - name: Install Playwright Browsers
         working-directory: ./frontend
         run: npx playwright install --with-deps
 
+      - name: Setup auth backend environment
+        working-directory: ./auth-backend
+        run: |
+          echo "JWT_SECRET=$(node -e "console.log(require('crypto').randomBytes(32).toString('hex'))")" >> .env
+          echo "SESSION_SECRET=$(node -e "console.log(require('crypto').randomBytes(32).toString('hex'))")" >> .env
+          echo "PORT=3001" >> .env
+          echo "FRONTEND_URL=http://localhost:5173" >> .env
+          echo "NODE_ENV=test" >> .env
+
+      - name: Seed test users
+        working-directory: ./auth-backend
+        env:
+          E2E_ADMIN_EMAIL: admin@test.com
+          E2E_ADMIN_PASSWORD: testpassword123
+          E2E_COMMUNITY_EMAIL: community@test.com
+          E2E_COMMUNITY_PASSWORD: testpassword123
+        run: npm run seed-test-users
+
+      - name: Start auth backend server
+        working-directory: ./auth-backend
+        run: npm run dev &
+        env:
+          PORT: 3001
+
+      - name: Wait for auth backend to be ready
+        run: |
+          echo "Waiting for auth backend to start..."
+          n=0
+          until [ $n -ge 30 ]; do
+            if curl -f http://localhost:3001/api/health > /dev/null 2>&1; then
+              echo "✅ Auth backend is ready!"
+              exit 0
+            fi
+            n=$((n+1))
+            echo "Attempt $n/30: Backend not ready yet, waiting..."
+            sleep 1
+          done
+          echo "❌ Timeout waiting for auth backend"
+          exit 1
+
       - name: Run Playwright tests
         working-directory: ./frontend
+        env:
+          E2E_ADMIN_EMAIL: admin@test.com
+          E2E_ADMIN_PASSWORD: testpassword123
+          E2E_COMMUNITY_EMAIL: community@test.com
+          E2E_COMMUNITY_PASSWORD: testpassword123
+          VITE_API_URL: http://localhost:3001/api
         run: npm test
 
       - name: Upload test results

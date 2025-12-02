@@ -8,6 +8,12 @@ import {
   clickUploadPhotoButton,
 } from '../helpers';
 
+test.beforeEach(async ({ page }) => {
+  await page.addInitScript(() => {
+    localStorage.setItem('hasSeenInstructions', 'true');
+  });
+});
+
 test.describe('Admin Photo Upload with Duplicate Detection Tests', () => {
   test.beforeEach(async ({ page }) => {
     // Clear localStorage before each test
@@ -62,9 +68,8 @@ test.describe('Admin Photo Upload with Duplicate Detection Tests', () => {
     // Wait a bit for the upload to complete and be saved to localStorage
     await page.waitForTimeout(2000);
 
-    // Reload page and re-authenticate as admin (role is lost on reload)
+    // Reload page (authentication is preserved via localStorage)
     await page.reload();
-    await loginAsAdmin(page);
 
     await fileInput.setInputFiles({
       name: 'duplicate-turtle.png',
@@ -163,9 +168,8 @@ test.describe('Admin Photo Upload with Duplicate Detection Tests', () => {
     await page.waitForSelector('text=/Upload Successful/i', { timeout: 30000 });
     await page.waitForTimeout(2000);
 
-    // Upload duplicate - reload and re-authenticate as admin (role is lost on reload)
+    // Upload duplicate - reload page (authentication is preserved via localStorage)
     await page.reload();
-    await loginAsAdmin(page);
 
     await fileInput.setInputFiles({
       name: 'match-turtle.png',
@@ -346,9 +350,8 @@ test.describe('Admin Photo Upload with Duplicate Detection Tests', () => {
     await page.waitForSelector('text=/Upload Successful/i', { timeout: 30000 });
     await page.waitForTimeout(2000);
 
-    // Upload duplicate - reload and re-authenticate as admin (role is lost on reload)
+    // Upload duplicate - reload page (authentication is preserved via localStorage)
     await page.reload();
-    await loginAsAdmin(page);
 
     await fileInput.setInputFiles({
       name: 'view-all-test.png',

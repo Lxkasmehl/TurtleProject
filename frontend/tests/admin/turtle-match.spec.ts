@@ -7,6 +7,12 @@ import {
   clickUploadPhotoButton,
 } from '../helpers';
 
+test.beforeEach(async ({ page }) => {
+  await page.addInitScript(() => {
+    localStorage.setItem('hasSeenInstructions', 'true');
+  });
+});
+
 test.describe('Admin Turtle Match Page Tests', () => {
   test.beforeEach(async ({ page }) => {
     // Clear localStorage before each test
@@ -166,9 +172,8 @@ test.describe('Admin Turtle Match Page Tests', () => {
       timeout: 30000,
     });
 
-    // Upload again (same file)
+    // Upload again (same file) - reload page (authentication is preserved via localStorage)
     await page.reload();
-    await loginAsAdmin(page);
 
     // Get fresh file input locator after reload
     const fileInput2 = page.locator('input[type="file"]');
