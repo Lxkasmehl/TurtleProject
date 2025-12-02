@@ -4,11 +4,9 @@ import joblib
 import numpy as np
 import faiss
 from sklearn.cluster import MiniBatchKMeans
-
-from search_utils import run_initial_dbscan, initialize_faiss_index, add_new_turtle_image_to_index, \
-    filtered_faiss_search
-from vlad_utils import build_vocabulary, compute_vlad
-from sklearn.decomposition import PCA
+from search_utils import initialize_faiss_index
+from vlad_utils import compute_vlad
+import time
 
 # --- CONFIGURATION ---
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -24,15 +22,20 @@ GLOBAL_RESOURCES = {
     'vlad_array': None,
 }
 
-# --- CV PARAMETERS ---
-SIFT_NFEATURES = 0
+# --- OPTIMIZED CV PARAMETERS ---
+# 1. Cap Features: 10k is high detail, but prevents the 180k explosion
+SIFT_NFEATURES = 10000
 SIFT_NOCTAVE_LAYERS = 3
-SIFT_CONTRAST_THRESHOLD = 0.02
+SIFT_CONTRAST_THRESHOLD = 0.03  # Slightly stricter to ignore noise
 SIFT_EDGE_THRESHOLD = 10
 SIFT_SIGMA = 1.6
 
-CLAHE_CLIP_LIMIT = 3.0
+# CLAHE: High - Helps with dark shells, Low - Helps with light shells
+CLAHE_CLIP_LIMIT = 1.0
 CLAHE_TILE_GRID_SIZE = (16, 16)
+
+# Resize Limit: Downscale 4K images to this max dimension
+MAX_IMAGE_DIMENSION = 1200
 
 
 def get_SIFT():
@@ -50,25 +53,57 @@ def get_CLAHE():
         tileGridSize=CLAHE_TILE_GRID_SIZE)
 
 
-# --- RESOURCE MANAGEMENT ---
+# --- HELPER: MEMORY & SPEED OPTIMIZED EXTRACTION ---
+def extract_features_from_image(image_path):
+    """
+    Reads image, RESIZES if too large, applies CLAHE, runs SIFT.
+    Returns: (keypoints, descriptors)
+    """
+    sift = get_SIFT()
+    img = cv.imread(image_path, cv.IMREAD_GRAYSCALE)
+    if img is None: return None, None
 
+    # --- SPEED OPTIMIZATION: Resize Huge Images ---
+    h, w = img.shape
+    if max(h, w) > MAX_IMAGE_DIMENSION:
+        scale = MAX_IMAGE_DIMENSION / max(h, w)
+        new_w, new_h = int(w * scale), int(h * scale)
+        img = cv.resize(img, (new_w, new_h), interpolation=cv.INTER_AREA)
+    # -----------------------------------------
+
+    clahe = get_CLAHE()
+    img = clahe.apply(img)
+
+    kps, des = sift.detectAndCompute(img, None)
+    if des is None or len(des) == 0: return None, None
+    '''
+    # --- ROOTSIFT TRANSFORMATION (NEW) ---
+    # 1. L1 Normalize: Divide each vector by its sum (Manhattan distance normalization)
+    #    eps prevents division by zero
+    eps = 1e-7
+    des /= (des.sum(axis=1, keepdims=True) + eps)
+
+    # 2. Square Root: Takes the element-wise square root
+    #    This maps the Euclidean distance to the Hellinger kernel (better for histograms)
+    des = np.sqrt(des)
+    # -------------------------------------
+    '''
+    return kps, des
+
+
+# --- RESOURCE MANAGEMENT ---
 def load_vocabulary(vocab_path=DEFAULT_VOCAB_PATH):
-    print('Loading vocabulary...')
-    if not os.path.exists(vocab_path):
-        print('Vocabulary not found.')
-        return None
+    if not os.path.exists(vocab_path): return None
     return joblib.load(vocab_path)
 
 
 def load_faiss_index(index_path=DEFAULT_INDEX_PATH):
-    if not os.path.exists(index_path):
-        return None
+    if not os.path.exists(index_path): return None
     return faiss.read_index(index_path)
 
 
 def load_metadata(metadata_path=DEFAULT_METADATA_PATH):
-    if not os.path.exists(metadata_path):
-        return []
+    if not os.path.exists(metadata_path): return []
     return joblib.load(metadata_path)
 
 
@@ -77,73 +112,12 @@ def load_vlad_array(vlad_array_path=DEFAULT_VLAD_ARRAY_PATH):
     return np.load(vlad_array_path)
 
 
-# --- NEW: MEMORY-SAFE TRAINING LOGIC ---
-
-def train_vocabulary_incremental(root_data_path, vocab_save_path, num_clusters=64, batch_size=100):
-    """
-    Trains K-Means using Mini-Batches to avoid RAM crashes.
-    It loads 'batch_size' files, extracts SIFT, updates the model, and clears RAM.
-    """
-    print(f"📉 Starting Incremental Training (k={num_clusters})...")
-
-    # 1. Initialize the MiniBatch Model
-    kmeans = MiniBatchKMeans(
-        n_clusters=num_clusters,
-        random_state=42,
-        batch_size=10000,  # Scikit-learn internal batch size
-        n_init=3
-    )
-
-    # 2. Collect all .npz file paths first (Lightweight)
-    all_npz_files = []
-    for root, dirs, files in os.walk(root_data_path):
-        for f in files:
-            if f.endswith(".npz"):
-                all_npz_files.append(os.path.join(root, f))
-
-    print(f"Found {len(all_npz_files)} files to process.")
-
-    # 3. Loop through files in chunks
-    current_batch_descriptors = []
-    files_processed = 0
-
-    for i, file_path in enumerate(all_npz_files):
-        try:
-            data = np.load(file_path, allow_pickle=True)
-            if 'descriptors' in data and data['descriptors'] is not None:
-                descriptors = data['descriptors']
-                # SIFT descriptors are typically uint8 or float32. KMeans needs float.
-                if descriptors.shape[0] > 0:
-                    current_batch_descriptors.append(descriptors)
-        except Exception as e:
-            print(f"Skipping bad file {file_path}: {e}")
-
-        # 4. If batch is full, Train and Flush
-        if len(current_batch_descriptors) >= batch_size or i == len(all_npz_files) - 1:
-            if current_batch_descriptors:
-                # Stack just this batch (e.g. 100 files worth)
-                batch_data = np.vstack(current_batch_descriptors).astype('float32')
-
-                # TEACH THE MODEL (Incremental Update)
-                kmeans.partial_fit(batch_data)
-
-                files_processed += len(current_batch_descriptors)
-                print(f"   Training progress: {files_processed}/{len(all_npz_files)} files processed...")
-
-                # FREE RAM
-                current_batch_descriptors = []
-
-    # 5. Save the Trained Model
-    print("✅ Training Complete. Saving Vocabulary...")
-    joblib.dump(kmeans, vocab_save_path)
-    return kmeans
-
-
 def load_or_generate_persistent_data(data_directory):
     global GLOBAL_RESOURCES
     GLOBAL_RESOURCES['vocab'] = load_vocabulary()
     GLOBAL_RESOURCES['faiss_index'] = load_faiss_index()
     GLOBAL_RESOURCES['metadata'] = load_metadata()
+    GLOBAL_RESOURCES['vlad_array'] = load_vlad_array()
 
     if GLOBAL_RESOURCES['vocab'] and GLOBAL_RESOURCES['faiss_index']:
         print("✅ Resources Loaded from Disk.")
@@ -152,221 +126,255 @@ def load_or_generate_persistent_data(data_directory):
     print("⚠️ Rebuilding Index/Vocab from scratch...")
     rebuild_faiss_index_from_folders(data_directory)
 
-    # Reload
     GLOBAL_RESOURCES['vocab'] = load_vocabulary()
     GLOBAL_RESOURCES['faiss_index'] = load_faiss_index()
     GLOBAL_RESOURCES['metadata'] = load_metadata()
+    GLOBAL_RESOURCES['vlad_array'] = load_vlad_array()
     return True
 
 
-# --- CORE IMAGE OPS ---
+# --- CORE OPS ---
+def process_new_image(image_path, kmeans_vocab):
+    _, des = extract_features_from_image(image_path)
+    if des is None: return None
+    return compute_vlad(des, kmeans_vocab).reshape(1, -1).astype('float32')
+
 
 def process_image_through_SIFT(image_path, output_path):
-    """
-    Generates SIFT keypoints/descriptors and saves to .npz
-    """
-    SIFT = get_SIFT()
-    imgGray = cv.imread(image_path, cv.IMREAD_GRAYSCALE)
-    if imgGray is None:
-        print(f"Failed to load Image: {image_path}")
-        return False, None
+    kps, des = extract_features_from_image(image_path)
+    if des is None: return False, None
 
-    clahe = get_CLAHE()
-    imgGray = clahe.apply(imgGray)
-
-    keypoints, descriptors = SIFT.detectAndCompute(imgGray, None)
-
-    if descriptors is None or len(descriptors) == 0:
-        # print(f"No descriptors found for: {image_path}") # Optional: Reduce spam
-        return False, None
-
-    kp_array = np.array([
-        (kp.pt, kp.size, kp.angle, kp.response, kp.octave, kp.class_id)
-        for kp in keypoints
-    ], dtype=object)
-
+    kp_array = np.array([(p.pt, p.size, p.angle, p.response, p.octave, p.class_id) for p in kps], dtype=object)
     try:
-        np.savez(output_path, keypoints=kp_array, descriptors=descriptors)
-        return True, descriptors
+        np.savez(output_path, keypoints=kp_array, descriptors=des)
+        return True, des
     except Exception as e:
-        print(f"Failed to save NPZ to {output_path}: {e}")
+        print(f"Error saving NPZ: {e}")
         return False, None
-
-
-def process_new_image(image_path, kmeans_vocab):
-    """
-    Calculates VLAD vector for a single new image (used for searching).
-    """
-    sift = get_SIFT()
-    img_gray = cv.imread(image_path, cv.IMREAD_GRAYSCALE)
-    if img_gray is None: return None
-
-    clahe = get_CLAHE()
-    img_gray = clahe.apply(img_gray)
-
-    keypoints, descriptors = sift.detectAndCompute(img_gray, None)
-    if descriptors is None or len(descriptors) == 0: return None
-
-    vlad_vector = compute_vlad(descriptors, kmeans_vocab)
-    return vlad_vector.reshape(1, -1).astype('float32')
 
 
 def SIFT_from_file(file_path):
-    """Helper to load data back from .npz for verification/plotting"""
     try:
         data = np.load(file_path, allow_pickle=True)
-        # imgGray = data['image'] # We removed image saving to save space
         kp_array = data['keypoints']
         descriptors = data['descriptors']
 
+        # SAFEGUARD: If loading an OLD file with 180k descriptors, downsample it
+        # This prevents the "5 minute freeze" even if you forget to delete old files
+        if len(descriptors) > 15000:
+            indices = np.random.choice(len(descriptors), 15000, replace=False)
+            descriptors = descriptors[indices]
+            kp_array = kp_array[indices]
+
         keypoints = [
-            cv.KeyPoint(pt[0], pt[1], size, angle, response, octave, class_id)
-            for (pt, size, angle, response, octave, class_id) in kp_array
+            cv.KeyPoint(p[0][0], p[0][1], p[1], p[2], p[3], p[4], p[5])
+            for p in kp_array
         ]
         return None, keypoints, descriptors, os.path.basename(file_path)
     except Exception as e:
-        print(f"Error loading NPZ {file_path}: {e}")
-        return None, [], None, os.path.basename(file_path)
+        return None, [], None, ""
 
 
-# --- SEARCH LOGIC ---
-
-def smart_search(image_path, location_filter=None, k_results=5):
-    # (Keep your existing smart_search code exactly as is)
+# --- SEARCH & VERIFICATION ---
+def smart_search(image_path, location_filter=None, k_results=20):
     vocab = GLOBAL_RESOURCES['vocab']
     index = GLOBAL_RESOURCES['faiss_index']
     metadata = GLOBAL_RESOURCES['metadata']
 
     if not vocab or not index: return []
 
-    q_vec = process_new_image(image_path, vocab)
-    if q_vec is None: return []
+    query_vector = process_new_image(image_path, vocab)
+    if query_vector is None: return []
 
-    dists, idxs = index.search(q_vec, k_results * 2)
+    dists, idxs = index.search(query_vector, k_results * 5)
     results = []
-    seen = set()
+    seen_sites = set()
 
     for i, idx in enumerate(idxs[0]):
         if idx == -1 or idx >= len(metadata): continue
         meta = metadata[idx]
-        sid = meta.get('site_id', 'Unknown')
-        if sid not in seen:
-            seen.add(sid)
+        site_id = meta.get('site_id', 'Unknown')
+        if site_id not in seen_sites:
+            seen_sites.add(site_id)
             results.append({
-                'filename': meta['filename'],
+                'filename': meta.get('filename'),
                 'file_path': meta.get('file_path'),
-                'site_id': sid,
-                'distance': float(dists[0][i]),
-                'location': meta.get('location')
+                'site_id': site_id,
+                'location': meta.get('location', 'Unknown'),
+                'distance': float(dists[0][i])
             })
         if len(results) >= k_results: break
     return results
 
 
-# --- SETUP & TRAINING ---
-def rebuild_faiss_index_from_folders(data_directory,
-                                     vocab_save_path=DEFAULT_VOCAB_PATH,
-                                     index_save_path=DEFAULT_INDEX_PATH,
-                                     metadata_save_path=DEFAULT_METADATA_PATH,
-                                     vlad_array_save_path=DEFAULT_VLAD_ARRAY_PATH,
-                                     num_clusters=64):
+def rerank_results_with_spatial_verification(query_image_path, initial_results):
     """
-    [MASTER SETUP]
-    1. REGENERATES MISSING .NPZ FILES from source images.
-    2. Trains/Loads Vocab (Memory Safe).
-    3. Generates VLAD vectors.
-    4. Builds FAISS.
+    STAGE 2: GEOMETRIC VERIFICATION (CLASSIC RANSAC)
+    - Reverted to standard cv.RANSAC for better tolerance on curved surfaces.
+    - Increased reprojectionThreshold to 8.0 (looser).
     """
-    print("♻️  STARTING MASTER REBUILD...")
+    if not initial_results:
+        return []
 
-    # --- STEP 0: REGENERATE MISSING .NPZ FILES ---
-    print(f"   Scanning {data_directory} for missing feature files...")
-    regen_count = 0
+    print(f"🔍 Spatial Verification: Checking top {len(initial_results)} candidates...")
+
+    kp_query, des_query = extract_features_from_image(query_image_path)
+    if des_query is None:
+        print("   -> No features found in query.")
+        return initial_results
+
+    bf = cv.BFMatcher()
+    verified_results = []
+
+    for i, res in enumerate(initial_results):
+        candidate_path = res.get('file_path')
+        fname = os.path.basename(candidate_path) if candidate_path else "???"
+        print(f"   [{i + 1}/{len(initial_results)}] {fname}...", end="", flush=True)
+
+        if not candidate_path or not os.path.exists(candidate_path):
+            print(" SKIP (File)")
+            continue
+
+        try:
+            _, kp_candidate, des_candidate, _ = SIFT_from_file(candidate_path)
+            if des_candidate is None:
+                print(" SKIP (No Desc)")
+                continue
+
+            # Match
+            matches = bf.knnMatch(des_query, des_candidate, k=2)
+            good = [m for m, n in matches if m.distance < 0.70 * n.distance]
+
+            inliers = 0
+            if len(good) >= 4:
+                src_pts = np.float32([kp_query[m.queryIdx].pt for m in good]).reshape(-1, 1, 2)
+                dst_pts = np.float32([kp_candidate[m.trainIdx].pt for m in good]).reshape(-1, 1, 2)
+
+                # --- REVERT TO CLASSIC RANSAC ---
+                # Threshold increased to 8.0 to allow for 3D curvature distortion
+                M, mask = cv.findHomography(src_pts, dst_pts, cv.RANSAC, 8.0)
+
+                if mask is not None:
+                    inliers = np.sum(mask)
+
+            print(f" Inliers: {inliers}")
+            res['spatial_score'] = int(inliers)
+            verified_results.append(res)
+
+        except Exception as e:
+            print(f" ERROR: {e}")
+            pass
+
+    verified_results.sort(key=lambda x: x.get('spatial_score', 0), reverse=True)
+    return verified_results
+
+
+# --- TRAINING LOGIC (Memory Safe) ---
+def train_vocabulary_incremental(root_data_path, vocab_save_path, num_clusters=64, batch_size=100):
+    print(f"📉 Starting Incremental Training (k={num_clusters})...")
+    kmeans = MiniBatchKMeans(n_clusters=num_clusters, random_state=42, batch_size=10000, n_init=3)
+
+    all_npz_files = []
+    for root, dirs, files in os.walk(root_data_path):
+        for f in files:
+            if f.endswith(".npz"): all_npz_files.append(os.path.join(root, f))
+
+    current_batch = []
+    files_processed = 0
+    for i, fpath in enumerate(all_npz_files):
+        try:
+            d = np.load(fpath, allow_pickle=True)
+            if 'descriptors' in d and d['descriptors'] is not None:
+                # If descriptor count is crazy high, downsample BEFORE training to save RAM
+                des = d['descriptors']
+                if len(des) > 10000:
+                    indices = np.random.choice(len(des), 10000, replace=False)
+                    des = des[indices]
+                current_batch.append(des)
+        except:
+            pass
+
+        if len(current_batch) >= batch_size or i == len(all_npz_files) - 1:
+            if current_batch:
+                kmeans.partial_fit(np.vstack(current_batch).astype('float32'))
+                files_processed += len(current_batch)
+                print(f"   Training: {files_processed}/{len(all_npz_files)} files...")
+                current_batch = []
+
+    joblib.dump(kmeans, vocab_save_path)
+    return kmeans
+
+
+def rebuild_faiss_index_from_folders(data_directory, vocab_save_path=DEFAULT_VOCAB_PATH,
+                                     index_save_path=DEFAULT_INDEX_PATH, metadata_save_path=DEFAULT_METADATA_PATH,
+                                     vlad_array_save_path=DEFAULT_VLAD_ARRAY_PATH, num_clusters=64):
+    print("♻️  STARTING MASTER REBUILD...")
+    start_time = time.time()
+    # 1. Regenerate Missing NPZ
+    print("   Scanning for missing NPZ files...")
     for root, dirs, files in os.walk(data_directory):
         for f in files:
-            if f.lower().endswith(('.jpg', '.jpeg', '.png')):
-                image_path = os.path.join(root, f)
-                if 'ref_data' in root:
-                    npz_name = os.path.splitext(f)[0] + ".npz"
-                    npz_path = os.path.join(root, npz_name)
-                    if not os.path.exists(npz_path):
-                        # Silent processing unless you want spam
-                        process_image_through_SIFT(image_path, npz_path)
-                        regen_count += 1
-                        if regen_count % 10 == 0: print(f"   Generated {regen_count} descriptors...")
+            if f.lower().endswith(('.jpg', '.png', '.jpeg')) and 'ref_data' in root:
+                npz = os.path.join(root, os.path.splitext(f)[0] + ".npz")
+                if not os.path.exists(npz):
+                    process_image_through_SIFT(os.path.join(root, f), npz)
 
-    print(f"   ✅ Regeneration Complete. Created {regen_count} new .npz files.")
-
-    # --- STEP 1: TRAIN VOCABULARY (WITH HEALTH CHECK) ---
+    # 2. Train Vocab
     kmeans_vocab = None
     if os.path.exists(vocab_save_path):
-        print("Loading existing vocabulary...")
         try:
             kmeans_vocab = joblib.load(vocab_save_path)
-            # CHECK: Is it actually fitted?
-            if not hasattr(kmeans_vocab, 'cluster_centers_'):
-                print("⚠️  Existing vocabulary is CORRUPT (Not fitted). Deleting...")
-                kmeans_vocab = None
-        except Exception:
+            if not hasattr(kmeans_vocab, 'cluster_centers_'): kmeans_vocab = None
+        except:
             kmeans_vocab = None
 
     if kmeans_vocab is None:
-        # RUN NEW INCREMENTAL TRAINING
         kmeans_vocab = train_vocabulary_incremental(data_directory, vocab_save_path, num_clusters)
 
-    # Final check to prevent crash
     if not hasattr(kmeans_vocab, 'cluster_centers_'):
-        print("❌ CRITICAL ERROR: Vocabulary training failed (No data found?). Cannot proceed.")
+        print("❌ CRITICAL: Vocab training failed.")
         return None
 
-    # --- STEP 2: GENERATE VLAD VECTORS ---
-    print("Generating VLAD vectors for Index...")
-    all_vlad_vectors = []
-    final_metadata = []
-
+    # 3. Build Index
+    print("   Generating Index...")
+    all_vlad = []
+    final_meta = []
     for root, dirs, files in os.walk(data_directory):
         for f in files:
             if f.endswith(".npz"):
-                file_path = os.path.join(root, f)
+                path = os.path.join(root, f)
                 try:
-                    parts = file_path.split(os.sep)
+                    parts = path.split(os.sep)
                     if 'ref_data' in parts:
                         idx = parts.index('ref_data')
-                        tid = parts[idx - 1]
-                        loc = parts[idx - 2]
+                        tid, loc = parts[idx - 1], parts[idx - 2]
                     else:
-                        tid = "Unknown";
-                        loc = "Unknown"
+                        tid, loc = "Unknown", "Unknown"
 
-                    data = np.load(file_path, allow_pickle=True)
-                    des = data.get('descriptors')
+                    d = np.load(path, allow_pickle=True)
+
+                    # Safety Sample for VLAD generation too
+                    des = d.get('descriptors')
+                    if des is not None and len(des) > 15000:
+                        indices = np.random.choice(len(des), 15000, replace=False)
+                        des = des[indices]
 
                     if des is not None and len(des) > 0:
                         vlad = compute_vlad(des, kmeans_vocab)
-                        all_vlad_vectors.append(vlad)
+                        all_vlad.append(vlad)
+                        final_meta.append({'filename': f, 'file_path': path, 'site_id': tid, 'location': loc})
+                except:
+                    pass
 
-                        final_metadata.append({
-                            'filename': f,
-                            'file_path': file_path,
-                            'original_index': len(all_vlad_vectors) - 1,
-                            'site_id': tid,
-                            'location': loc
-                        })
-                except Exception as e:
-                    print(f"Error processing {f}: {e}")
+    if all_vlad:
+        vlad_arr = np.array(all_vlad).astype('float32')
+        np.save(vlad_array_save_path, vlad_arr)
+        joblib.dump(final_meta, metadata_save_path)
 
-    if not all_vlad_vectors:
-        print("❌ ERROR: No valid data found to index.")
-        return None
-
-    # --- STEP 3: BUILD & SAVE INDEX ---
-    vlad_array = np.array(all_vlad_vectors).astype('float32')
-    np.save(vlad_array_save_path, vlad_array)
-    joblib.dump(final_metadata, metadata_save_path)
-
-    print(f"Building FAISS Index with {vlad_array.shape[0]} vectors...")
-    global_index = initialize_faiss_index(vlad_array)
-    faiss.write_index(global_index, index_save_path)
-
-    print("✅ System Ready.")
-    return kmeans_vocab
+        index = initialize_faiss_index(vlad_arr)
+        faiss.write_index(index, index_save_path)
+        end_time = time.time()  # <--- TIMER END
+        elapsed = end_time - start_time
+        print(f"✅ System Rebuild Complete in {elapsed:.2f} seconds.")
+        return kmeans_vocab
+    return None

@@ -299,12 +299,75 @@ class TurtleManager:
 
     def search_for_matches(self, query_image_path):
         """
-        Wraps smart_search to be used directly by the GUI.
-        Returns the raw results list from FAISS.
+        Smart Search with "Auto-Mirror" fallback.
+        1. Search Normal.
+        2. If scores are low, flip image horizontal and search again.
+        3. Return the best set of results.
         """
-        print(f"🔍 Analyzing {os.path.basename(query_image_path)}...")
-        # k=5 gives us the top 5 candidates
-        return smart_search(query_image_path, k_results=5)
+        MATCH_CONFIDENCE_THRESHOLD = 15
+
+        filename = os.path.basename(query_image_path)
+        print(f"🔍 Analyzing {filename} (Normal Orientation)...")
+
+        # 1. First Pass (Normal)
+        # Use existing smart_search
+        candidates_normal = smart_search(query_image_path, k_results=20)
+        results_normal = []
+
+        # Rerank with RANSAC
+        if candidates_normal:
+            results_normal = rerank_results_with_spatial_verification(query_image_path, candidates_normal)
+
+        # Get best score
+        best_score_normal = 0
+        if results_normal:
+            best_score_normal = results_normal[0].get('spatial_score', 0)
+
+        # 2. Check Threshold
+        if best_score_normal >= MATCH_CONFIDENCE_THRESHOLD:
+            print(f"✅ Good match found ({best_score_normal} matches). Returning results.")
+            return results_normal[:5]
+
+        # 3. Second Pass (Mirrored)
+        print(f"⚠️ Low confidence ({best_score_normal} < {MATCH_CONFIDENCE_THRESHOLD}). Attempting Mirror Search...")
+
+        # Generate Mirrored Image
+        img = cv.imread(query_image_path)
+        if img is None: return results_normal[:5]
+
+        img_mirrored = cv.flip(img, 1)  # 1 = Horizontal Flip
+
+        # Save temp file
+        mirror_path = os.path.join(self.review_queue_dir, f"TEMP_MIRROR_{filename}")
+        cv.imwrite(mirror_path, img_mirrored)
+
+        try:
+            candidates_mirror = smart_search(mirror_path, k_results=20)
+            results_mirror = []
+            if candidates_mirror:
+                results_mirror = rerank_results_with_spatial_verification(mirror_path, candidates_mirror)
+
+            best_score_mirror = 0
+            if results_mirror:
+                best_score_mirror = results_mirror[0].get('spatial_score', 0)
+
+            print(f"   Normal Best: {best_score_normal} | Mirrored Best: {best_score_mirror}")
+
+            # 4. Compare and Return Winner
+            if best_score_mirror > best_score_normal:
+                print("🪞 Mirrored orientation yielded better results! Switching view.")
+                # Mark as mirrored for UI
+                for res in results_mirror:
+                    res['is_mirrored'] = True
+                return results_mirror[:5]
+            else:
+                print("   Normal orientation was better.")
+                return results_normal[:5]
+
+        finally:
+            # Cleanup temp file
+            if os.path.exists(mirror_path):
+                os.remove(mirror_path)
 
     def add_observation_to_turtle(self, source_image_path, turtle_id, location_hint=None):
         """
