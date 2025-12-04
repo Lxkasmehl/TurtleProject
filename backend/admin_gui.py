@@ -1,3 +1,15 @@
+import sys
+import os
+
+# --- PATH HACK ---
+current_dir = os.path.dirname(os.path.abspath(__file__))
+if current_dir not in sys.path:
+    sys.path.append(current_dir)
+
+import tkinter as tk
+from turtles import image_processing
+from turtle_manager import TurtleManager # This stays the same since they are siblings
+
 import os
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk

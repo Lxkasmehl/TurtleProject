@@ -1,13 +1,25 @@
+
+# --- PATH HACK: Allow importing from the 'turtles' package ---
 import os
 import shutil
 import time
-
 import cv2 as cv
 import json
+import sys
 
-# We import your existing SIFT logic to reuse it
-from image_processing import *
+# --- PATH SETUP ---
+# This ensures we can find the 'turtles' package regardless of where we run this script
+current_dir = os.path.dirname(os.path.abspath(__file__))
+if current_dir not in sys.path:
+    sys.path.append(current_dir)
 
+# --- IMPORT THE BRAIN ---
+try:
+    # Try importing as a package (Standard Django way)
+    from turtles import image_processing
+except ImportError:
+    # Fallback: Try local import if files are flat
+    import image_processing
 # --- CONFIGURATION ---
 BASE_DATA_DIR = 'data'
 
@@ -29,7 +41,7 @@ class TurtleManager:
         self._ensure_special_directories()
 
         print("🐢 TurtleManager: Loading Search Index & Vocabulary...")
-        load_or_generate_persistent_data(self.base_dir)
+        image_processing.load_or_generate_persistent_data(self.base_dir)
         print("✅ Resources Ready.")
 
     def _ensure_special_directories(self):
@@ -132,6 +144,8 @@ class TurtleManager:
         """
         Scans drive, extracts 'Letter+3Digit' ID, creates folders, and skips duplicates.
         """
+        ingest_start_time = time.time()
+
         print(f"🐢 Starting Ingest from: {drive_root_path}")
         if not os.path.exists(drive_root_path):
             print("❌ Error: Drive path does not exist.")
@@ -175,8 +189,10 @@ class TurtleManager:
                         count_new += 1
                     elif status == "skipped":
                         count_skipped += 1
-
+        # --- TIMER END ---
+        total_time = time.time() - ingest_start_time
         print(f"\n🎉 Ingest Complete. New: {count_new}, Skipped (Existing/Duplicates): {count_skipped}")
+        print(f"⏱️ Total Ingest Time: {total_time:.2f}s")
 
     def _process_single_turtle(self, source_path, location_dir, turtle_id):
         """
@@ -208,7 +224,7 @@ class TurtleManager:
 
         # If we get here, it is the FIRST time seeing this ID in this location.
         shutil.copy2(source_path, dest_image_path)
-        success, _ = process_image_through_SIFT(dest_image_path, dest_npz_path)
+        success, _ = image_processing.process_image_through_SIFT(dest_image_path, dest_npz_path)
 
         if success:
             print(f"   ✅ Processed New: {turtle_id}")
@@ -262,7 +278,7 @@ class TurtleManager:
 
         # 4. Run AI Search
         # Note: smart_search must return 'file_path' or 'filename' we can resolve
-        results = smart_search(query_save_path, k_results=5)
+        results = image_processing.smart_search(query_save_path, k_results=5)
 
         # 5. Populate the Candidate Folder
         if results:
@@ -304,6 +320,8 @@ class TurtleManager:
         2. If scores are low, flip image horizontal and search again.
         3. Return the best set of results.
         """
+        total_search_start = time.time()
+
         MATCH_CONFIDENCE_THRESHOLD = 15
 
         filename = os.path.basename(query_image_path)
@@ -311,12 +329,12 @@ class TurtleManager:
 
         # 1. First Pass (Normal)
         # Use existing smart_search
-        candidates_normal = smart_search(query_image_path, k_results=20)
+        candidates_normal = image_processing.smart_search(query_image_path, k_results=20)
         results_normal = []
 
         # Rerank with RANSAC
         if candidates_normal:
-            results_normal = rerank_results_with_spatial_verification(query_image_path, candidates_normal)
+            results_normal = image_processing.rerank_results_with_spatial_verification(query_image_path, candidates_normal)
 
         # Get best score
         best_score_normal = 0
@@ -326,6 +344,7 @@ class TurtleManager:
         # 2. Check Threshold
         if best_score_normal >= MATCH_CONFIDENCE_THRESHOLD:
             print(f"✅ Good match found ({best_score_normal} matches). Returning results.")
+            print(f"⏱️ Total Search & Verify Logic: {time.time() - total_search_start:.4f}s")
             return results_normal[:5]
 
         # 3. Second Pass (Mirrored)
@@ -342,10 +361,10 @@ class TurtleManager:
         cv.imwrite(mirror_path, img_mirrored)
 
         try:
-            candidates_mirror = smart_search(mirror_path, k_results=20)
+            candidates_mirror = image_processing.smart_search(mirror_path, k_results=20)
             results_mirror = []
             if candidates_mirror:
-                results_mirror = rerank_results_with_spatial_verification(mirror_path, candidates_mirror)
+                results_mirror = image_processing.rerank_results_with_spatial_verification(mirror_path, candidates_mirror)
 
             best_score_mirror = 0
             if results_mirror:
@@ -356,12 +375,14 @@ class TurtleManager:
             # 4. Compare and Return Winner
             if best_score_mirror > best_score_normal:
                 print("🪞 Mirrored orientation yielded better results! Switching view.")
+                print(f"⏱️ Total Search & Verify Logic: {time.time() - total_search_start:.4f}s")
                 # Mark as mirrored for UI
                 for res in results_mirror:
                     res['is_mirrored'] = True
                 return results_mirror[:5]
             else:
                 print("   Normal orientation was better.")
+                print(f"⏱️ Total Search & Verify Logic: {time.time() - total_search_start:.4f}s")
                 return results_normal[:5]
 
         finally:
@@ -372,20 +393,16 @@ class TurtleManager:
     def add_observation_to_turtle(self, source_image_path, turtle_id, location_hint=None):
         """
         Called when you click "Match!" on the GUI.
-        Moves the uploaded image to that Turtle's 'loose_images' folder.
+        Moves the uploaded image to that Turtle's 'loose_images' folder,
+        processes it, and then DELETES the temporary NPZ file.
         """
-        # 1. Find the turtle's home folder
+        # 1. Find the turtle's home folder (Logic remains the same)
         target_dir = None
-
-        # Strategy A: Use the location hint from the match result
         if location_hint and location_hint != "Unknown":
-            # Attempt to construct path: data/State/Location/TurtleID
-            # (We might need to scan for the state if hint doesn't include it)
             possible_path = os.path.join(self.base_dir, location_hint, turtle_id)
             if os.path.exists(possible_path):
                 target_dir = possible_path
 
-        # Strategy B: If hint fails, scan the whole data folder for the ID
         if not target_dir:
             print(f"Scanning for home of {turtle_id}...")
             for root, dirs, files in os.walk(self.base_dir):
@@ -393,40 +410,38 @@ class TurtleManager:
                     target_dir = root
                     break
 
-        if not target_dir:
-            return False, f"Could not find folder for {turtle_id}"
+        if not target_dir: return False, f"Could not find folder for {turtle_id}"
 
-        # 2. Move the image
+        # 2. Setup Paths
         loose_dir = os.path.join(target_dir, 'loose_images')
         os.makedirs(loose_dir, exist_ok=True)
 
         filename = os.path.basename(source_image_path)
-        # Optional: Rename to avoid collision?
-        # For now, we keep original name or append timestamp
         save_name = f"Obs_{int(time.time())}_{filename}"
         dest_path = os.path.join(loose_dir, save_name)
 
+        npz_name = os.path.splitext(save_name)[0] + ".npz"
+        npz_path = os.path.join(loose_dir, npz_name)  # Path to temporary NPZ
+
         try:
-            # Copy the image
+            # Copy the original image
             shutil.copy2(source_image_path, dest_path)
             print(f"📸 Image copied to {dest_path}")
-            
-            # 3. Process the image (create .npz file for future searches)
-            # This allows the observation to be found in future searches
-            npz_name = os.path.splitext(save_name)[0] + ".npz"
-            npz_path = os.path.join(loose_dir, npz_name)
-            
-            print(f"🔍 Processing observation image for SIFT/VLAD features...")
-            success, _ = process_image_through_SIFT(dest_path, npz_path)
-            
+
+            # 3. Process SIFT (Necessary for temporary validation, but not persistent storage)
+            success, _ = image_processing.process_image_through_SIFT(dest_path, npz_path)
+
             if success:
                 print(f"✅ Observation processed and added to {turtle_id}")
-                print(f"   Image: {dest_path}")
-                print(f"   Features: {npz_path}")
             else:
-                print(f"⚠️ Warning: Image saved but SIFT processing failed for {turtle_id}")
-                print(f"   Image: {dest_path}")
-            
+                print(f"⚠️ Warning: Image saved but SIFT processing failed for {os.path.basename(dest_path)}")
+
+            # --- CRITICAL FIX: DELETE THE NPZ ---
+            if os.path.exists(npz_path):
+                os.remove(npz_path)
+                print(f"🗑️ Deleted temporary NPZ file: {os.path.basename(npz_path)}")
+            # -----------------------------------
+
             return True, dest_path
         except Exception as e:
             return False, str(e)
