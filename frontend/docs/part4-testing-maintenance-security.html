@@ -1,0 +1,606 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Part 4 – Testing, Maintenance, Security, and Project Management</title>
+    <style>
+      body {
+        font-family: 'Calibri', 'Arial', sans-serif;
+        font-size: 11pt;
+        line-height: 1.5;
+        margin: 2.54cm;
+        color: #000000;
+      }
+      h1 {
+        font-size: 18pt;
+        font-weight: bold;
+        color: #000000;
+        margin-top: 12pt;
+        margin-bottom: 6pt;
+        page-break-after: avoid;
+      }
+      h2 {
+        font-size: 14pt;
+        font-weight: bold;
+        color: #000000;
+        margin-top: 12pt;
+        margin-bottom: 6pt;
+        page-break-after: avoid;
+      }
+      h3 {
+        font-size: 12pt;
+        font-weight: bold;
+        color: #000000;
+        margin-top: 10pt;
+        margin-bottom: 4pt;
+        page-break-after: avoid;
+      }
+      h4 {
+        font-size: 11pt;
+        font-weight: bold;
+        color: #000000;
+        margin-top: 8pt;
+        margin-bottom: 4pt;
+        page-break-after: avoid;
+      }
+      p {
+        margin-top: 6pt;
+        margin-bottom: 6pt;
+        text-align: justify;
+      }
+      ul,
+      ol {
+        margin-top: 6pt;
+        margin-bottom: 6pt;
+        padding-left: 36pt;
+      }
+      li {
+        margin-top: 3pt;
+        margin-bottom: 3pt;
+      }
+      strong {
+        font-weight: bold;
+      }
+      code {
+        font-family: 'Courier New', monospace;
+        font-size: 10pt;
+        background-color: #f5f5f5;
+        padding: 2pt 4pt;
+      }
+      hr {
+        border: none;
+        border-top: 1pt solid #000000;
+        margin-top: 12pt;
+        margin-bottom: 12pt;
+      }
+      .test-case {
+        margin-top: 8pt;
+        margin-bottom: 8pt;
+        padding-left: 12pt;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Part 4 – Testing, Maintenance, Security, and Project Management</h1>
+
+    <h2>Test Plan</h2>
+
+    <h3>Overview</h3>
+
+    <p>
+      The frontend testing strategy for TurtleTracker focuses on ensuring reliability,
+      security, and user experience across all critical user flows. Our testing approach
+      combines multiple testing methodologies to achieve comprehensive coverage of the
+      React-based application.
+    </p>
+
+    <h3>Potential Risks and Mitigation Strategies</h3>
+
+    <p><strong>Risk 1: Photo Upload Failures</strong></p>
+    <ul>
+      <li>
+        <strong>Risk</strong>: Network interruptions, invalid file formats, or backend
+        unavailability could cause upload failures, leading to data loss and poor user
+        experience.
+      </li>
+      <li>
+        <strong>Mitigation</strong>: Implement robust error handling with user-friendly
+        notifications, automatic retry mechanisms for transient failures, and client-side
+        file validation before upload attempts. Progress indicators provide transparency
+        during uploads.
+      </li>
+    </ul>
+
+    <p><strong>Risk 2: Authentication Token Expiration</strong></p>
+    <ul>
+      <li>
+        <strong>Risk</strong>: Users may lose their session unexpectedly, causing
+        frustration when attempting to access protected resources or perform actions.
+      </li>
+      <li>
+        <strong>Mitigation</strong>: Implement token refresh mechanisms, automatic session
+        restoration on app startup via <code>AuthProvider</code>, and graceful handling of
+        401 responses with automatic logout and redirect to login.
+      </li>
+    </ul>
+
+    <p><strong>Risk 3: Location Permission Denials</strong></p>
+    <ul>
+      <li>
+        <strong>Risk</strong>: Users may deny location permissions, affecting data quality
+        for turtle tracking.
+      </li>
+      <li>
+        <strong>Mitigation</strong>: The system gracefully handles location failures by
+        allowing uploads to proceed without location data, with clear warnings logged.
+        Location requests are made only when necessary and with proper user consent.
+      </li>
+    </ul>
+
+    <p><strong>Risk 4: Cross-Browser Compatibility Issues</strong></p>
+    <ul>
+      <li>
+        <strong>Risk</strong>: Different browsers may handle file uploads, location APIs,
+        or CSS differently, causing inconsistent user experiences.
+      </li>
+      <li>
+        <strong>Mitigation</strong>: Comprehensive end-to-end testing using Playwright
+        across Chromium, Firefox, and WebKit engines. Progressive enhancement ensures core
+        functionality works even if advanced features fail.
+      </li>
+    </ul>
+
+    <p><strong>Risk 5: State Management Race Conditions</strong></p>
+    <ul>
+      <li>
+        <strong>Risk</strong>: Concurrent uploads or rapid state changes could lead to
+        inconsistent UI states or memory leaks.
+      </li>
+      <li>
+        <strong>Mitigation</strong>: Proper cleanup of intervals and event listeners in
+        React hooks, use of refs for interval management, and state updates that are
+        idempotent and safe to call multiple times.
+      </li>
+    </ul>
+
+    <h3>Types of Tests</h3>
+
+    <p><strong>1. End-to-End Tests (E2E) using Playwright</strong></p>
+    <ul>
+      <li>Full user journey testing using Playwright framework</li>
+      <li>Test complete workflows: login → upload → view records → admin operations</li>
+      <li>Cross-browser testing across Chromium, Firefox, and WebKit engines</li>
+      <li>Mobile viewport testing (Mobile Chrome, Mobile Safari)</li>
+      <li>
+        Examples:
+        <ul>
+          <li>Navigation tests: Testing page routing and mobile menu functionality</li>
+          <li>
+            Admin photo upload tests: Testing duplicate detection and match page
+            navigation
+          </li>
+          <li>Admin turtle records tests: Testing data display and filtering</li>
+          <li>Admin turtle match tests: Testing duplicate matching functionality</li>
+        </ul>
+      </li>
+    </ul>
+
+    <p><strong>2. White Box Testing Analysis</strong></p>
+    <ul>
+      <li>Code coverage analysis using cyclomatic complexity metrics</li>
+      <li>Statement coverage, branch coverage, and path coverage analysis</li>
+      <li>
+        Focus on complex functions with high decision points (e.g.,
+        <code>handleUpload</code>
+        function with cyclomatic complexity of 14)
+      </li>
+      <li>Test case derivation based on control flow graph analysis</li>
+    </ul>
+
+    <h3>Detailed White Box Testing: Photo Upload Functionality</h3>
+
+    <p>
+      The <code>handleUpload</code> function in <code>usePhotoUpload.tsx</code> is a
+      critical component with a cyclomatic complexity of 14, making it an ideal candidate
+      for comprehensive white box testing. This function handles file uploads, location
+      retrieval, duplicate detection, progress tracking, and error management.
+    </p>
+
+    <h4>Requirement Focus: Photo Upload with Duplicate Detection</h4>
+
+    <p>
+      <strong>Requirement</strong>: "As an admin user, when I upload a photo of a turtle
+      plastron, the system must detect if this turtle has been seen before and immediately
+      navigate me to the match page for verification."
+    </p>
+
+    <h4>White Box Test Cases (10+ Test Cases)</h4>
+
+    <div class="test-case">
+      <p><strong>Test Case 1: Early Return - No Files Selected</strong></p>
+      <ul>
+        <li>
+          <strong>Input</strong>: <code>files = []</code>, <code>preview = null</code>
+        </li>
+        <li><strong>Expected Path</strong>: Function returns immediately at line 89</li>
+        <li><strong>Coverage</strong>: Statement 1 (early return check)</li>
+        <li><strong>Verification</strong>: No API calls made, no state changes</li>
+      </ul>
+    </div>
+
+    <div class="test-case">
+      <p><strong>Test Case 2: Early Return - No Preview Available</strong></p>
+      <ul>
+        <li>
+          <strong>Input</strong>: <code>files = [file]</code>, <code>preview = null</code>
+        </li>
+        <li><strong>Expected Path</strong>: Function returns immediately at line 89</li>
+        <li><strong>Coverage</strong>: Statement 1 (OR condition in early return)</li>
+        <li><strong>Verification</strong>: Function exits before any upload logic</li>
+      </ul>
+    </div>
+
+    <div class="test-case">
+      <p>
+        <strong>Test Case 3: Successful Upload - Community User with Location</strong>
+      </p>
+      <ul>
+        <li>
+          <strong>Input</strong>: Valid file, preview exists,
+          <code>role = 'community'</code>, location available
+        </li>
+        <li><strong>Expected Path</strong>: Lines 92-140, 150-166</li>
+        <li><strong>Coverage</strong>: Statements 2-5, 13-15, 18-19, 22, 25-29, 31</li>
+        <li>
+          <strong>Verification</strong>: Upload state transitions to 'success', progress
+          reaches 100%, success notification displayed
+        </li>
+      </ul>
+    </div>
+
+    <div class="test-case">
+      <p><strong>Test Case 4: Successful Upload - Existing Interval Cleanup</strong></p>
+      <ul>
+        <li>
+          <strong>Input</strong>: Valid file,
+          <code>progressIntervalRef.current</code> already set
+        </li>
+        <li><strong>Expected Path</strong>: Lines 97-100, then normal upload flow</li>
+        <li><strong>Coverage</strong>: Statements 6-7 (interval cleanup)</li>
+        <li>
+          <strong>Verification</strong>: Previous interval cleared before starting new
+          upload
+        </li>
+      </ul>
+    </div>
+
+    <div class="test-case">
+      <p><strong>Test Case 5: Location Retrieval Failure - Upload Continues</strong></p>
+      <ul>
+        <li>
+          <strong>Input</strong>: Valid file, <code>getCurrentLocation()</code> throws
+          error
+        </li>
+        <li>
+          <strong>Expected Path</strong>: Lines 121-130 (catch block), then upload
+          continues
+        </li>
+        <li>
+          <strong>Coverage</strong>: Statements 17-18 (error handling in nested try-catch)
+        </li>
+        <li>
+          <strong>Verification</strong>: Warning logged, upload proceeds without location,
+          <code>isGettingLocation</code> set to false
+        </li>
+      </ul>
+    </div>
+
+    <div class="test-case">
+      <p><strong>Test Case 6: Location Unavailable - Null Return</strong></p>
+      <ul>
+        <li>
+          <strong>Input</strong>: Valid file, <code>getCurrentLocation()</code> returns
+          <code>null</code>
+        </li>
+        <li><strong>Expected Path</strong>: Lines 122-125</li>
+        <li><strong>Coverage</strong>: Statements 15-16 (null check and warning)</li>
+        <li>
+          <strong>Verification</strong>: Warning logged, upload continues with
+          <code>location = null</code>
+        </li>
+      </ul>
+    </div>
+
+    <div class="test-case">
+      <p><strong>Test Case 7: Progress Animation - Reaches 90% Cap</strong></p>
+      <ul>
+        <li>
+          <strong>Input</strong>: Upload in progress, progress callback executed multiple
+          times
+        </li>
+        <li>
+          <strong>Expected Path</strong>: Lines 104-113, specifically when
+          <code>prev >= 90</code>
+        </li>
+        <li>
+          <strong>Coverage</strong>: Statements 9-11 (interval cleanup within progress
+          callback)
+        </li>
+        <li>
+          <strong>Verification</strong>: Progress stops at 90%, interval cleared, progress
+          doesn't exceed 90% until upload completes
+        </li>
+      </ul>
+    </div>
+
+    <div class="test-case">
+      <p>
+        <strong>Test Case 8: Admin Duplicate Detection - Navigate to Match Page</strong>
+      </p>
+      <ul>
+        <li>
+          <strong>Input</strong>: <code>role = 'admin'</code>,
+          <code>response.isDuplicate = true</code>,
+          <code>response.duplicateImageId = 'img_456'</code>
+        </li>
+        <li><strong>Expected Path</strong>: Lines 136-140, 144-148</li>
+        <li>
+          <strong>Coverage</strong>: Statements 20-21, 23-24 (duplicate detection and
+          navigation)
+        </li>
+        <li>
+          <strong>Verification</strong>: Interval cleared, navigation to
+          <code>/admin/turtle-match/img_456</code>, function returns early, no success
+          notification
+        </li>
+      </ul>
+    </div>
+
+    <div class="test-case">
+      <p><strong>Test Case 9: Admin Upload - Success with Callback</strong></p>
+      <ul>
+        <li>
+          <strong>Input</strong>: <code>role = 'admin'</code>,
+          <code>onSuccess</code> callback defined, successful upload
+        </li>
+        <li><strong>Expected Path</strong>: Lines 142-166, specifically line 156-158</li>
+        <li>
+          <strong>Coverage</strong>: Statement 30 (<code>onSuccess</code> callback
+          execution)
+        </li>
+        <li>
+          <strong>Verification</strong>: <code>onSuccess(response.imageId)</code> called
+          with correct image ID
+        </li>
+      </ul>
+    </div>
+
+    <div class="test-case">
+      <p><strong>Test Case 10: Upload Error - Backend Returns Failure</strong></p>
+      <ul>
+        <li>
+          <strong>Input</strong>: <code>response.success = false</code>,
+          <code>response.message = 'Upload failed'</code>
+        </li>
+        <li>
+          <strong>Expected Path</strong>: Lines 142, 167-169, then catch block 170-192
+        </li>
+        <li>
+          <strong>Coverage</strong>: Statement 32 (error thrown), Statements 33-41 (error
+          handling)
+        </li>
+        <li>
+          <strong>Verification</strong>: Error state set, progress reset to 0, error
+          notification displayed with correct message
+        </li>
+      </ul>
+    </div>
+
+    <div class="test-case">
+      <p><strong>Test Case 11: Upload Error - Network Failure</strong></p>
+      <ul>
+        <li><strong>Input</strong>: <code>uploadPhoto()</code> throws network error</li>
+        <li>
+          <strong>Expected Path</strong>: Catch block 170-192, specifically error message
+          extraction
+        </li>
+        <li>
+          <strong>Coverage</strong>: Statements 35-36, 38-41 (error message handling)
+        </li>
+        <li>
+          <strong>Verification</strong>: Generic error message displayed if error object
+          lacks message property
+        </li>
+      </ul>
+    </div>
+
+    <div class="test-case">
+      <p><strong>Test Case 12: Upload Error - Invalid Error Object</strong></p>
+      <ul>
+        <li>
+          <strong>Input</strong>: <code>uploadPhoto()</code> throws primitive value
+          (string) instead of Error object
+        </li>
+        <li>
+          <strong>Expected Path</strong>: Lines 178-181 (error message extraction with
+          type checking)
+        </li>
+        <li><strong>Coverage</strong>: Statement 39 (default error message fallback)</li>
+        <li>
+          <strong>Verification</strong>: Default error message "Upload failed. Please try
+          again." displayed
+        </li>
+      </ul>
+    </div>
+
+    <div class="test-case">
+      <p><strong>Test Case 13: Progress Animation - Increment Below 90%</strong></p>
+      <ul>
+        <li><strong>Input</strong>: Upload in progress, <code>prev < 90</code></li>
+        <li>
+          <strong>Expected Path</strong>: Lines 104-113, specifically the else branch
+        </li>
+        <li><strong>Coverage</strong>: Statement 12 (progress increment)</li>
+        <li>
+          <strong>Verification</strong>: Progress increases by 10% each interval tick
+        </li>
+      </ul>
+    </div>
+
+    <div class="test-case">
+      <p><strong>Test Case 14: Interval Cleanup on Error</strong></p>
+      <ul>
+        <li>
+          <strong>Input</strong>: Upload fails,
+          <code>progressIntervalRef.current</code> exists
+        </li>
+        <li><strong>Expected Path</strong>: Lines 172-175 in catch block</li>
+        <li><strong>Coverage</strong>: Statements 33-34 (interval cleanup on error)</li>
+        <li>
+          <strong>Verification</strong>: Interval cleared even when error occurs,
+          preventing memory leaks
+        </li>
+      </ul>
+    </div>
+
+    <div class="test-case">
+      <p><strong>Test Case 15: Success Without Callback</strong></p>
+      <ul>
+        <li>
+          <strong>Input</strong>: Successful upload, <code>onSuccess = undefined</code>
+        </li>
+        <li><strong>Expected Path</strong>: Lines 142-166, skipping lines 156-158</li>
+        <li><strong>Coverage</strong>: Verify Statement 30 is NOT executed</li>
+        <li>
+          <strong>Verification</strong>: Upload succeeds, but callback is not called when
+          undefined
+        </li>
+      </ul>
+    </div>
+
+    <p>
+      These test cases provide comprehensive coverage of all decision points, branches,
+      and statements within the <code>handleUpload</code> function, ensuring robust
+      validation of the photo upload requirement with special focus on admin duplicate
+      detection functionality.
+    </p>
+
+    <hr />
+
+    <h2>Security Requirements</h2>
+
+    <h3>Misuse Cases in Use Case Diagram</h3>
+
+    <p>
+      The frontend architecture addresses security through several misuse cases that must
+      be prevented:
+    </p>
+
+    <p><strong>Misuse Case 1: Unauthorized Access to Admin Routes</strong></p>
+    <ul>
+      <li>
+        <strong>Threat</strong>: Non-admin users attempting to access
+        <code>/admin/turtle-match</code> or <code>/admin/users</code> routes
+      </li>
+      <li>
+        <strong>Mitigation</strong>: Route protection via role-based checks in
+        <code>Navigation</code> component, redirecting unauthorized users to home page
+      </li>
+    </ul>
+
+    <p><strong>Misuse Case 2: Token Theft via XSS</strong></p>
+    <ul>
+      <li>
+        <strong>Threat</strong>: Malicious scripts stealing authentication tokens from
+        localStorage
+      </li>
+      <li>
+        <strong>Mitigation</strong>: Content Security Policy (CSP) headers, input
+        sanitization, and avoiding <code>dangerouslySetInnerHTML</code>. Tokens stored in
+        httpOnly cookies would be preferred in production.
+      </li>
+    </ul>
+
+    <p><strong>Misuse Case 3: File Upload Attacks</strong></p>
+    <ul>
+      <li>
+        <strong>Threat</strong>: Malicious file uploads (oversized files, executable
+        scripts disguised as images)
+      </li>
+      <li>
+        <strong>Mitigation</strong>: Client-side file validation in
+        <code>validateFile()</code> function checking MIME types, file size limits, and
+        file extensions before upload
+      </li>
+    </ul>
+
+    <p><strong>Misuse Case 4: Location Data Privacy Violation</strong></p>
+    <ul>
+      <li><strong>Threat</strong>: Unauthorized access to user location data</li>
+      <li>
+        <strong>Mitigation</strong>: Location only requested when necessary, user consent
+        required, location data not stored in localStorage, transmitted only during
+        authenticated upload requests
+      </li>
+    </ul>
+
+    <h3>Architecture Design Choices Addressing Security</h3>
+
+    <p>
+      The frontend employs a <strong>defense-in-depth</strong> strategy: (1)
+      <strong>Component-level authorization</strong> checks user roles before rendering
+      admin UI elements, (2) <strong>API request interception</strong> via
+      <code>apiRequest()</code> automatically includes Bearer tokens and handles 401
+      responses, (3) <strong>Input validation</strong> occurs at multiple layers
+      (client-side file validation, type checking with TypeScript), and (4)
+      <strong>State management isolation</strong> using Redux ensures user data is
+      centralized and protected from direct manipulation. The separation of concerns
+      between <code>AuthProvider</code>, route guards, and API service layers creates
+      multiple security checkpoints.
+    </p>
+
+    <hr />
+
+    <h2>Socio-Technical System Analysis</h2>
+
+    <p>
+      Yes, TurtleTracker is a <strong>socio-technical system</strong>. It integrates
+      social and technical elements: (1) <strong>Social dimension</strong>: Community
+      members contribute turtle sightings, creating a collaborative conservation effort
+      that relies on human participation, trust, and engagement. The system includes
+      gamification plans (leaderboards, achievements) to motivate participation. (2)
+      <strong>Technical dimension</strong>: React frontend, backend APIs, image processing
+      algorithms, and database systems handle the technical infrastructure. (3)
+      <strong>Interaction</strong>: The system's value emerges from the interaction
+      between these dimensions—technology enables community engagement, while social
+      participation generates the data that makes the technical system valuable. The
+      role-based access control (community vs. admin) reflects social hierarchies (citizen
+      scientists vs. researchers), and the user experience design must account for varying
+      technical literacy levels among community members. The system's success depends on
+      both technical reliability and social adoption, making it inherently
+      socio-technical.
+    </p>
+
+    <hr />
+
+    <h2>Teamwork Management and Motivation</h2>
+
+    <p>
+      Our frontend team uses <strong>agile methodologies</strong> with weekly sprints and
+      daily standups to maintain communication and track progress. We employ
+      <strong>Git feature branches</strong> for parallel development, with code reviews
+      required before merging to ensure quality.
+      <strong>Clear task assignment</strong> via GitHub issues with labels (bug, feature,
+      enhancement) helps team members understand priorities. We maintain
+      <strong>transparency</strong> through regular demos of completed features,
+      celebrating milestones like successful E2E test implementations.
+      <strong>Pair programming</strong> sessions for complex features like the photo
+      upload hook improve code quality and knowledge sharing.
+      <strong>Flexible work schedules</strong> accommodate different time zones and
+      commitments, with asynchronous communication via GitHub discussions for non-urgent
+      matters. Regular <strong>retrospectives</strong> help identify process improvements
+      and address any blockers, ensuring the team stays motivated and productive.
+    </p>
+  </body>
+</html>
