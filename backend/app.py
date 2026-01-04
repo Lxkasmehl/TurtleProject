@@ -6,6 +6,8 @@ Handles photo uploads, matching, and review queue
 import os
 import json
 import time
+import jwt
+from functools import wraps
 from flask import Flask, request, jsonify, send_file
 from flask_cors import CORS
 from werkzeug.utils import secure_filename
@@ -23,8 +25,75 @@ UPLOAD_FOLDER = tempfile.gettempdir()
 ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'webp'}
 MAX_FILE_SIZE = 5 * 1024 * 1024  # 5MB
 
+# JWT Configuration - must match auth-backend JWT_SECRET
+JWT_SECRET = os.environ.get('JWT_SECRET', 'your-secret-key-change-in-production')
+
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+
+def verify_jwt_token(token):
+    """
+    Verify JWT token and return decoded payload.
+    Returns (success: bool, payload: dict or None, error: str or None)
+    """
+    if not token:
+        return False, None, 'No token provided'
+    
+    try:
+        # Remove 'Bearer ' prefix if present
+        if token.startswith('Bearer '):
+            token = token[7:]
+        
+        decoded = jwt.decode(token, JWT_SECRET, algorithms=['HS256'])
+        return True, decoded, None
+    except jwt.ExpiredSignatureError:
+        return False, None, 'Token has expired'
+    except jwt.InvalidTokenError as e:
+        return False, None, f'Invalid token: {str(e)}'
+
+def get_user_from_request():
+    """
+    Extract and verify user information from Authorization header.
+    Returns (success: bool, user_data: dict or None, error: str or None)
+    """
+    auth_header = request.headers.get('Authorization')
+    if not auth_header:
+        return False, None, 'Authorization header required'
+    
+    success, payload, error = verify_jwt_token(auth_header)
+    if not success:
+        return False, None, error
+    
+    return True, payload, None
+
+def require_auth(f):
+    """Decorator to require authentication"""
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        success, user_data, error = get_user_from_request()
+        if not success:
+            return jsonify({'error': error or 'Authentication required'}), 401
+        
+        # Attach user data to request for use in route
+        request.user = user_data
+        return f(*args, **kwargs)
+    return decorated_function
+
+def require_admin(f):
+    """Decorator to require admin role"""
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        success, user_data, error = get_user_from_request()
+        if not success:
+            return jsonify({'error': error or 'Authentication required'}), 401
+        
+        if user_data.get('role') != 'admin':
+            return jsonify({'error': 'Admin access required'}), 403
+        
+        # Attach user data to request for use in route
+        request.user = user_data
+        return f(*args, **kwargs)
+    return decorated_function
 
 def convert_npz_to_image_path(npz_path):
     """
@@ -53,19 +122,25 @@ def health_check():
     return jsonify({'status': 'ok', 'message': 'Turtle API is running'})
 
 @app.route('/api/upload', methods=['POST'])
+@require_auth
 def upload_photo():
     """
     Upload photo endpoint
     - Admin: Process immediately and return top 5 matches
     - Community: Save to review queue with top 5 matches
+    
+    Requires JWT token in Authorization header. Role is extracted from token.
     """
     try:
         if 'file' not in request.files:
             return jsonify({'error': 'No file provided'}), 400
         
+        # Get user role from verified JWT token (not from form data)
+        user_data = request.user
+        user_role = user_data.get('role', 'community')  # Extract from verified token
+        user_email = user_data.get('email', 'anonymous')
+        
         file = request.files['file']
-        user_role = request.form.get('role', 'community')  # 'admin' or 'community'
-        user_email = request.form.get('email', 'anonymous')
         state = request.form.get('state', '')  # Optional: State where turtle was found
         location = request.form.get('location', '')  # Optional: Specific location
         
@@ -172,6 +247,7 @@ def upload_photo():
         pass
 
 @app.route('/api/review-queue', methods=['GET'])
+@require_admin
 def get_review_queue():
     """
     Get all pending review queue items (Admin only)
@@ -244,6 +320,7 @@ def get_review_queue():
         return jsonify({'error': f'Failed to load review queue: {str(e)}'}), 500
 
 @app.route('/api/review/<request_id>/approve', methods=['POST'])
+@require_admin
 def approve_review(request_id):
     """
     Approve a review queue item (Admin only)
@@ -301,13 +378,29 @@ def serve_image():
     safe_path = os.path.normpath(decoded_path)
     
     # Check if path is within data directory or temp directory
-    data_dir = os.path.normpath(manager.base_dir)
-    temp_dir = os.path.normpath(UPLOAD_FOLDER)
+    data_dir = os.path.abspath(os.path.normpath(manager.base_dir))
+    temp_dir = os.path.abspath(os.path.normpath(UPLOAD_FOLDER))
+    
+    def is_path_within_base(file_path, base_dir):
+        """
+        Safely check if file_path is within base_dir using os.path.commonpath.
+        This prevents path traversal attacks that startswith() would allow.
+        """
+        try:
+            file_abs = os.path.abspath(os.path.normpath(file_path))
+            base_abs = os.path.abspath(os.path.normpath(base_dir))
+            # Get the common path and verify it equals the base directory
+            common = os.path.commonpath([file_abs, base_abs])
+            return common == base_abs
+        except (ValueError, OSError):
+            # ValueError can occur if paths are on different drives (Windows)
+            # OSError can occur for invalid paths
+            return False
     
     full_path = None
     # Check if path is absolute and within allowed directories
     if os.path.isabs(safe_path):
-        if safe_path.startswith(data_dir) or safe_path.startswith(temp_dir):
+        if is_path_within_base(safe_path, data_dir) or is_path_within_base(safe_path, temp_dir):
             if os.path.exists(safe_path) and os.path.isfile(safe_path):
                 full_path = safe_path
     else:
@@ -315,8 +408,8 @@ def serve_image():
         for base_dir in [data_dir, temp_dir]:
             potential_path = os.path.normpath(os.path.join(base_dir, safe_path))
             if os.path.exists(potential_path) and os.path.isfile(potential_path):
-                # Verify it's still within the base directory
-                if potential_path.startswith(base_dir):
+                # Verify it's still within the base directory using safe check
+                if is_path_within_base(potential_path, base_dir):
                     full_path = potential_path
                     break
     

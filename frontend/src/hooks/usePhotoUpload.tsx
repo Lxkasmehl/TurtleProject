@@ -5,7 +5,7 @@ import { IconCheck, IconAlertCircle } from '@tabler/icons-react';
 import { validateFile, getCurrentLocation } from '../services/mockBackend';
 import { uploadTurtlePhoto, type UploadPhotoResponse } from '../services/api';
 import { useUser } from './useUser';
-import type { FileWithPath } from '@mantine/dropzone';
+import type { FileWithPath } from '../types/file';
 
 type UploadState = 'idle' | 'uploading' | 'success' | 'error';
 

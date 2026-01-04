@@ -187,9 +187,11 @@ def smart_search(image_path, location_filter=None, k_results=20):
             })
         if len(results) >= k_results: break
 
-        # --- TIMER END ---
-        t_total = time.time() - t_start
-        print(f"⚡ Search Processed in {t_total:.4f}s")
+    # --- TIMER END ---
+    # Timer code moved outside the loop to correctly measure total search time
+    # and print once after the loop completes, regardless of break condition
+    t_total = time.time() - t_start
+    print(f"⚡ Search Processed in {t_total:.4f}s")
 
     return results
 

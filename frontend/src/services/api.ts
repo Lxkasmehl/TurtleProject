@@ -248,22 +248,30 @@ export interface ApproveReviewResponse {
 // Upload photo (Admin or Community)
 export const uploadTurtlePhoto = async (
   file: File,
-  role: 'admin' | 'community',
-  email: string,
+  role: 'admin' | 'community', // Used by frontend for navigation logic, not sent to backend
+  email: string, // Used by frontend, not sent to backend
   location?: { state: string; location: string }
 ): Promise<UploadPhotoResponse> => {
   const formData = new FormData();
   formData.append('file', file);
-  formData.append('role', role);
-  formData.append('email', email);
+  // Note: role and email are no longer sent in form data - they come from JWT token
+  // These parameters are kept for API compatibility and frontend logic, but backend extracts them from JWT
 
   if (location) {
     formData.append('state', location.state);
     formData.append('location', location.location);
   }
 
+  const token = getToken();
+  const headers: Record<string, string> = {};
+
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
+
   const response = await fetch(`${TURTLE_API_BASE_URL}/upload`, {
     method: 'POST',
+    headers,
     body: formData,
   });
 
@@ -277,8 +285,16 @@ export const uploadTurtlePhoto = async (
 
 // Get review queue (Admin only)
 export const getReviewQueue = async (): Promise<ReviewQueueResponse> => {
+  const token = getToken();
+  const headers: Record<string, string> = {};
+
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
+
   const response = await fetch(`${TURTLE_API_BASE_URL}/review-queue`, {
     method: 'GET',
+    headers,
   });
 
   if (!response.ok) {
@@ -294,11 +310,18 @@ export const approveReview = async (
   requestId: string,
   data: ApproveReviewRequest
 ): Promise<ApproveReviewResponse> => {
+  const token = getToken();
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+  };
+
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
+
   const response = await fetch(`${TURTLE_API_BASE_URL}/review/${requestId}/approve`, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
+    headers,
     body: JSON.stringify(data),
   });
 
