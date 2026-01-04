@@ -117,6 +117,7 @@ export function usePhotoUpload({
 
     try {
       // 1. Get location if available
+      // Set getting location state first, then fetch location
       let location = null;
       setIsGettingLocation(true);
       try {

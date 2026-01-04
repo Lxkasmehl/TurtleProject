@@ -88,7 +88,7 @@ export function PreviewCard({
             )}
 
             {uploadState === 'uploading' && (
-              <Stack gap='xs'>
+              <Stack gap='xs' data-testid='upload-progress'>
                 <Group justify='space-between'>
                   <Text size='sm' fw={500}>
                     {isGettingLocation ? 'Getting location...' : 'Uploading...'}
@@ -111,6 +111,7 @@ export function PreviewCard({
 
             {uploadState === 'success' && uploadResponse && (
               <Alert
+                data-testid='upload-success-alert'
                 icon={isDuplicate ? <IconClock size={18} /> : <IconCheck size={18} />}
                 title={isDuplicate ? 'Duplicate Photo Detected' : 'Upload Successful!'}
                 color={isDuplicate ? 'orange' : 'green'}
@@ -184,4 +185,3 @@ export function PreviewCard({
     </Transition>
   );
 }
-
