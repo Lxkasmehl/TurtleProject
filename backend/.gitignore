@@ -1,10 +1,72 @@
-# Byte-compiled / optimized / DLL files
+# Python
 __pycache__/
 *.py[cod]
 *$py.class
-
-# C extensions
 *.so
+
+# Virtual environments
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# Django
+*.log
+db.sqlite3
+db.sqlite3-journal
+db.sqlite3-*
+turtles/db.sqlite3
+turtles/db.sqlite3-journal
+turtles/*.sqlite3
+turtles/media/
+turtles/staticfiles/
+turtles/static/
+local_settings.py
+
+# Machine Learning / Data files
+*.pkl
+*.npy
+*.npz
+*.index
+trained_*.pkl
+vlad_vocab.pkl
+metadata.pkl
+global_vlad_array.npy
+turtles.index
+turtles/turtles.index
+turtles/vlad_vocab.pkl
+turtles/metadata.pkl
+turtles/global_vlad_array.npy
+
+# Archives
+archive.zip
+*.zip
+
+# Data directories (user uploads)
+data/Community_Uploads/*
+data/Incidental_Finds/*
+data/Review_Queue/*
+data/**/*.jpg
+data/**/*.jpeg
+data/**/*.png
+data/**/*.npz
+!data/.gitkeep
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Temporary files
+backend.txt
+*.tmp
+*.bak
 
 # Distribution / packaging
 .Python
@@ -27,128 +89,12 @@ share/python-wheels/
 *.egg
 MANIFEST
 
-# PyInstaller
-*.manifest
-*.spec
-
-# Installer logs
-pip-log.txt
-pip-delete-this-directory.txt
-
-# Unit test / coverage reports
-htmlcov/
-.tox/
-.nox/
+# Testing
 .coverage
 .coverage.*
 .cache
 nosetests.xml
 coverage.xml
 *.cover
-*.py,cover
-.hypothesis/
 .pytest_cache/
-
-# Translations
-*.mo
-*.pot
-
-# Django stuff:
-*.log
-local_settings.py
-db.sqlite3
-db.sqlite3-journal
-db.sqlite3-*
-
-# Flask stuff:
-instance/
-.webassets-cache
-
-# Scrapy stuff:
-.scrapy
-
-# Sphinx documentation
-docs/_build/
-
-# PyBuilder
-target/
-
-# Jupyter Notebook
-.ipynb_checkpoints
-
-# IPython
-profile_default/
-ipython_config.py
-
-# pyenv
-.python-version
-
-# pipenv
-Pipfile.lock
-
-# PEP 582
-__pypackages__/
-
-# Celery stuff
-celerybeat-schedule
-celerybeat.pid
-
-# SageMath parsed files
-*.sage.py
-
-# Environments
-.env
-.venv
-env/
-venv/
-ENV/
-env.bak/
-venv.bak/
-
-# Spyder project settings
-.spyderproject
-.spyproject
-
-# Rope project settings
-.ropeproject
-
-# mkdocs documentation
-/site
-
-# mypy
-.mypy_cache/
-.dmypy.json
-dmypy.json
-
-# Pyre type checker
-.pyre/
-
-# Django specific
-*.log
-local_settings.py
-turtles/media/
-turtles/staticfiles/
-turtles/static/
-turtles/*.sqlite3
-turtles/*.sqlite3-journal
-
-# IDEs
-.vscode/
-.idea/
-*.swp
-*.swo
-*~
-.DS_Store
-
-# Project specific
-*.pkl
-archive.zip
-*.zip
-trained_*.pkl
-
-# Data directories (if they contain user uploads)
-/data/Community_Uploads/*
-/data/Incidental_Finds/*
-/data/Review_Queue/*
-!/data/.gitkeep
-
+.hypothesis/
