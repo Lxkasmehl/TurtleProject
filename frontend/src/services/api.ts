@@ -66,7 +66,7 @@ export const apiRequest = async (
 
   const response = await fetch(`${AUTH_API_BASE_URL}${endpoint}`, {
     ...options,
-    headers,
+    headers: headers as HeadersInit,
   });
 
   return response;

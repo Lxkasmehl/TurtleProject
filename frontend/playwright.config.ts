@@ -22,6 +22,22 @@ export default defineConfig({
 
     /* Collect trace when retrying the failed test. See https://playwright.dev/docs/trace-viewer */
     trace: 'on-first-retry',
+
+    /* Skip instructions modal by pre-setting localStorage */
+    storageState: {
+      cookies: [],
+      origins: [
+        {
+          origin: 'http://localhost:5173',
+          localStorage: [
+            {
+              name: 'hasSeenInstructions',
+              value: 'true'
+            }
+          ]
+        }
+      ]
+    }
   },
 
   /* Configure projects for major browsers */

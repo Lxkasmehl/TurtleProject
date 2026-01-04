@@ -192,9 +192,15 @@ export const grantLocationPermission = async (page: Page) => {
  * IMPORTANT: Make sure to call grantLocationPermission() BEFORE calling this function
  * to prevent browser permission dialogs from blocking the test.
  * The grantLocationPermission() function mocks the geolocation API to prevent dialogs.
+ *
+ * Note: There are two "Upload Photo" buttons on the page:
+ * 1. Mobile file selection button (size='lg', variant='light') - for selecting files
+ * 2. Preview card upload button (size='md') - for actually uploading the selected file
+ * This function targets the preview card button (size='md') which is the one that performs the upload.
  */
 export const clickUploadPhotoButton = async (page: Page) => {
-  // Simply click the button - the permission should already be granted via grantLocationPermission()
-  // and the geolocation API should be mocked to prevent dialogs
-  await page.getByRole('button', { name: 'Upload Photo' }).click();
+  // Target the preview card upload button specifically by using the data-size attribute
+  // This avoids the strict mode violation when both buttons are visible (e.g., on mobile)
+  // The preview card button has data-size="md" while the mobile button has data-size="lg"
+  await page.locator('button[data-size="md"]:has-text("Upload Photo")').click();
 };

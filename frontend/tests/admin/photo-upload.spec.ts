@@ -8,6 +8,12 @@ import {
   clickUploadPhotoButton,
 } from '../helpers';
 
+test.beforeEach(async ({ page }) => {
+  await page.addInitScript(() => {
+    localStorage.setItem('hasSeenInstructions', 'true');
+  });
+});
+
 test.describe('Admin Photo Upload with Duplicate Detection Tests', () => {
   test.beforeEach(async ({ page }) => {
     // Clear localStorage before each test
@@ -40,7 +46,7 @@ test.describe('Admin Photo Upload with Duplicate Detection Tests', () => {
       return canvas.toDataURL('image/png');
     });
 
-    const fileInput = page.locator('input[type="file"]');
+    const fileInput = page.locator('input[type="file"]:not([capture])').first();
 
     // Upload first photo
     await fileInput.setInputFiles({
@@ -101,7 +107,7 @@ test.describe('Admin Photo Upload with Duplicate Detection Tests', () => {
       return canvas.toDataURL('image/png');
     });
 
-    const fileInput = page.locator('input[type="file"]');
+    const fileInput = page.locator('input[type="file"]:not([capture])').first();
     await fileInput.setInputFiles({
       name: 'new-turtle.png',
       mimeType: 'image/png',
@@ -142,7 +148,7 @@ test.describe('Admin Photo Upload with Duplicate Detection Tests', () => {
       return canvas.toDataURL('image/png');
     });
 
-    const fileInput = page.locator('input[type="file"]');
+    const fileInput = page.locator('input[type="file"]:not([capture])').first();
 
     // Upload first time
     await fileInput.setInputFiles({
@@ -199,7 +205,7 @@ test.describe('Admin Photo Upload with Duplicate Detection Tests', () => {
       return canvas.toDataURL('image/png');
     });
 
-    const fileInput = page.locator('input[type="file"]');
+    const fileInput = page.locator('input[type="file"]:not([capture])').first();
     await fileInput.setInputFiles({
       name: 'new-photo.png',
       mimeType: 'image/png',
@@ -238,7 +244,7 @@ test.describe('Admin Photo Upload with Duplicate Detection Tests', () => {
       return canvas.toDataURL('image/png');
     });
 
-    const fileInput = page.locator('input[type="file"]');
+    const fileInput = page.locator('input[type="file"]:not([capture])').first();
     await fileInput.setInputFiles({
       name: 'progress-test.png',
       mimeType: 'image/png',
@@ -252,9 +258,25 @@ test.describe('Admin Photo Upload with Duplicate Detection Tests', () => {
     await page.waitForSelector('button:has-text("Upload Photo")', { timeout: 5000 });
     await clickUploadPhotoButton(page);
 
-    // Should see upload progress and then success notification
-    await page.waitForSelector('text=/Uploading/i', { timeout: 5000 });
+    // Should see upload progress - wait for the upload progress section to appear
+    // This ensures the upload state has been set to 'uploading'
+    await page.waitForSelector('[data-testid="upload-progress"]', { timeout: 5000 });
+
+    // Wait for either "Getting location..." or "Uploading..." text to be visible
+    await page.waitForSelector('text=/Getting location|Uploading/i', { timeout: 5000 });
+
+    // If we see "Getting location...", wait for it to transition to "Uploading..."
+    const gettingLocationVisible = await page
+      .getByText(/Getting location/i)
+      .isVisible()
+      .catch(() => false);
+    if (gettingLocationVisible) {
+      // Wait for transition to "Uploading..." state
+      await page.waitForSelector('text=/Uploading/i', { timeout: 5000 });
+    }
+
     // Use first() to handle multiple matches (Alert and Notification)
+    // Also check for the success alert in the preview card
     await expect(page.getByText(/Upload Successful/i).first()).toBeVisible({
       timeout: 20000,
     });
@@ -275,7 +297,7 @@ test.describe('Admin Photo Upload with Duplicate Detection Tests', () => {
       return canvas.toDataURL('image/png');
     });
 
-    const fileInput = page.locator('input[type="file"]');
+    const fileInput = page.locator('input[type="file"]:not([capture])').first();
     await fileInput.setInputFiles({
       name: 'records-test.png',
       mimeType: 'image/png',
@@ -324,7 +346,7 @@ test.describe('Admin Photo Upload with Duplicate Detection Tests', () => {
       return canvas.toDataURL('image/png');
     });
 
-    const fileInput = page.locator('input[type="file"]');
+    const fileInput = page.locator('input[type="file"]:not([capture])').first();
 
     // Upload first
     await fileInput.setInputFiles({

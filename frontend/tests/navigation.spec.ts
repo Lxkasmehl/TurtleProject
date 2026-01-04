@@ -1,6 +1,12 @@
 import { test, expect } from '@playwright/test';
 import { openMobileMenuIfPresent } from './helpers';
 
+test.beforeEach(async ({ page }) => {
+  await page.addInitScript(() => {
+    localStorage.setItem('hasSeenInstructions', 'true');
+  });
+});
+
 test.describe('Navigation Tests', () => {
   test('should navigate between all pages', async ({ page }) => {
     await page.goto('/');

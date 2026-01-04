@@ -7,6 +7,12 @@ import {
   clickUploadPhotoButton,
 } from '../helpers';
 
+test.beforeEach(async ({ page }) => {
+  await page.addInitScript(() => {
+    localStorage.setItem('hasSeenInstructions', 'true');
+  });
+});
+
 test.describe('Admin Turtle Records Page Tests', () => {
   test.beforeEach(async ({ page }) => {
     // Clear localStorage before each test
@@ -61,7 +67,7 @@ test.describe('Admin Turtle Records Page Tests', () => {
     await loginAsAdmin(page);
 
     // Create a test image file
-    const fileInput = page.locator('input[type="file"]');
+    const fileInput = page.locator('input[type="file"]:not([capture])').first();
     const filePath = await page.evaluate(() => {
       // Create a minimal test image
       const canvas = document.createElement('canvas');
@@ -105,7 +111,7 @@ test.describe('Admin Turtle Records Page Tests', () => {
     // Upload a photo first
     await loginAsAdmin(page);
 
-    const fileInput = page.locator('input[type="file"]');
+    const fileInput = page.locator('input[type="file"]:not([capture])').first();
     const filePath = await page.evaluate(() => {
       const canvas = document.createElement('canvas');
       canvas.width = 100;
