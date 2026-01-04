@@ -2,8 +2,11 @@ import { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { notifications } from '@mantine/notifications';
 import { IconCheck, IconAlertCircle } from '@tabler/icons-react';
-import { uploadPhoto, validateFile, getCurrentLocation } from '../services/mockBackend';
-import type { FileWithPath } from '@mantine/dropzone';
+import { validateFile, getCurrentLocation } from '../services/mockBackend';
+import { BACKEND_IP } from '../utils/imageUtils';
+
+// Define FileWithPath locally to avoid module resolution issues
+type FileWithPath = File & { path: string };
 
 type UploadState = 'idle' | 'uploading' | 'success' | 'error';
 
@@ -99,7 +102,8 @@ export function usePhotoUpload({
       progressIntervalRef.current = null;
     }
 
-    // Simulate progress animation
+    // Simulate progress animation.
+    // It yields at 90% to indicate we are waiting for the server response.
     progressIntervalRef.current = setInterval(() => {
       setUploadProgress((prev) => {
         if (prev >= 90) {
@@ -114,7 +118,7 @@ export function usePhotoUpload({
     }, 200);
 
     try {
-      // Get location if available (for all users)
+      // 1. Get location if available
       // Set getting location state first, then fetch location
       let location = null;
       setIsGettingLocation(true);
@@ -129,43 +133,87 @@ export function usePhotoUpload({
         setIsGettingLocation(false);
       }
 
-      // For admin, check for duplicates
-      const response = await uploadPhoto(file, role === 'admin', location);
+      // 2. Prepare Data for Backend
+      const formData = new FormData();
+      formData.append('image', file);
+      // If your backend expects 'role' or 'location', append them too:
+      // formData.append('role', role || 'guest');
+      if (location) {
+        formData.append('latitude', location.latitude.toString());
+        formData.append('longitude', location.longitude.toString());
+      }
 
-      // Clear interval and set to 100%
+      // 3. Send to Django Backend
+      const response = await fetch(`http://${BACKEND_IP}:8000/api/identify/upload/`, {
+        method: 'POST',
+        body: formData,
+        // Fetch automatically sets the Content-Type to multipart/form-data with the boundary
+      });
+
+      // --- Handshake / Response Handling ---
+
+      // Stop the simulation now that the network response has been received
       if (progressIntervalRef.current) {
         clearInterval(progressIntervalRef.current);
         progressIntervalRef.current = null;
       }
+
+      // Read the response data regardless of the status code
+      const data = await response.json();
+
+      if (!response.ok) {
+        // Use the server's error message if available
+        const serverErrorMessage =
+          data.message || data.detail || `Server error: ${response.statusText}`;
+        throw new Error(serverErrorMessage);
+      }
+
+      // If we reach here, the network call and server processing were successful (HTTP 200 OK)
       setUploadProgress(100);
+      setUploadState('success');
 
-      if (response.success) {
-        // If duplicate detected and admin, navigate to match page
-        if (response.isDuplicate && role === 'admin' && response.duplicateImageId) {
-          // Navigate to turtle match page
-          navigate(`/admin/turtle-match/${response.duplicateImageId}`);
-          return;
-        }
+      // We expect Django to return 'message', 'imageId', and 'isDuplicate'
+      setUploadResponse(data.message || 'Processing complete!');
+      setImageId(data.imageId || null);
+      setIsDuplicate(data.isDuplicate || false);
+      setPreviousUploadDate(data.previousUploadDate || null);
 
-        setUploadState('success');
-        setUploadResponse(response.message);
-        setImageId(response.imageId || null);
-        setIsDuplicate(response.isDuplicate || false);
-        setPreviousUploadDate(response.previousUploadDate || null);
+      // Handle Admin Duplicate Flow
+      if (data.isDuplicate && role === 'admin' && data.duplicateImageId) {
+        navigate(`/admin/turtle-match/${data.duplicateImageId}`);
+        return;
+      }
 
-        if (response.imageId && onSuccess) {
-          onSuccess(response.imageId);
-        }
+      // --- LOGIC FIX HERE ---
+
+      // Case 1: We got an Image ID (Immediate Success)
+      if (data.imageId) {
+        if (onSuccess) onSuccess(data.imageId);
 
         notifications.show({
-          title: 'Upload Successful!',
-          message: response.message,
+          title: 'Upload Successful! 🎉',
+          message: data.message || 'Image accepted by server.',
           color: 'green',
           icon: <IconCheck size={18} />,
           autoClose: 5000,
         });
-      } else {
-        throw new Error(response.message);
+      }
+      // Case 2: No Image ID, but we got a success message (e.g. Review Queue)
+      else if (data.message) {
+        notifications.show({
+          title: 'Upload Received',
+          message: data.message,
+          color: 'blue', // Blue indicates info/processing rather than error
+          icon: <IconCheck size={18} />,
+          autoClose: 5000,
+        });
+
+        // Optional: Reset form here if you want the user to be able to upload again immediately
+        // handleRemove();
+      }
+      // Case 3: Neither ID nor Message (Actual Failure)
+      else {
+        throw new Error('Upload failed: Server returned no ID and no message');
       }
     } catch (error: unknown) {
       // Clear interval on error
@@ -175,10 +223,11 @@ export function usePhotoUpload({
       }
       setUploadProgress(0);
       setUploadState('error');
+
       const errorMessage =
         error && typeof error === 'object' && 'message' in error
           ? (error.message as string)
-          : 'Upload failed. Please try again.';
+          : 'Upload failed: Server connection lost or returned malformed data.';
 
       setUploadResponse(errorMessage);
 

@@ -1,0 +1,100 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Virtual environments
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# Django
+*.log
+db.sqlite3
+db.sqlite3-journal
+db.sqlite3-*
+turtles/db.sqlite3
+turtles/db.sqlite3-journal
+turtles/*.sqlite3
+turtles/media/
+turtles/staticfiles/
+turtles/static/
+local_settings.py
+
+# Machine Learning / Data files
+*.pkl
+*.npy
+*.npz
+*.index
+trained_*.pkl
+vlad_vocab.pkl
+metadata.pkl
+global_vlad_array.npy
+turtles.index
+turtles/turtles.index
+turtles/vlad_vocab.pkl
+turtles/metadata.pkl
+turtles/global_vlad_array.npy
+
+# Archives
+archive.zip
+*.zip
+
+# Data directories (user uploads)
+data/Community_Uploads/*
+data/Incidental_Finds/*
+data/Review_Queue/*
+data/**/*.jpg
+data/**/*.jpeg
+data/**/*.png
+data/**/*.npz
+!data/.gitkeep
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Temporary files
+backend.txt
+*.tmp
+*.bak
+
+# Distribution / packaging
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+pip-wheel-metadata/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Testing
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+.pytest_cache/
+.hypothesis/
