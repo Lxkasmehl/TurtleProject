@@ -6,16 +6,19 @@ def reset_turtle_vision_data():
     base_dir = os.path.dirname(os.path.abspath(__file__))
     data_dir = os.path.join(base_dir, 'data')
 
+    turtles_dir = os.path.join(base_dir, 'turtles')
+
     # Files to delete (The Brains)
     model_files = [
-        os.path.join(base_dir, 'vlad_vocab.pkl'),
-        os.path.join(base_dir, 'turtles.index'),
-        os.path.join(base_dir, 'global_vlad_array.npy'),
-        os.path.join(base_dir, 'metadata.pkl')
+        os.path.join(turtles_dir, 'vlad_vocab.pkl'),
+        os.path.join(turtles_dir, 'turtles.index'),
+        os.path.join(turtles_dir, 'global_vlad_array.npy'),
+        os.path.join(turtles_dir, 'metadata.pkl')
     ]
 
     print("⚠️  STARTING SYSTEM RESET ⚠️")
     print(f"Scanning: {data_dir}")
+    print(f"Scanning Models: {turtles_dir}")
 
     # 2. Delete .npz Files (The Feature Data)
     npz_deleted_count = 0
