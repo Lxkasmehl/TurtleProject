@@ -8,11 +8,29 @@ import json
 import time
 import jwt
 from functools import wraps
+from pathlib import Path
+from dotenv import load_dotenv
 from flask import Flask, request, jsonify, send_file
 from flask_cors import CORS
 from werkzeug.utils import secure_filename
 import tempfile
 from turtle_manager import TurtleManager
+
+# Load environment variables from .env file
+# Try to load from backend/.env first, then from root .env
+env_paths = [
+    Path(__file__).parent / '.env',  # backend/.env
+    Path(__file__).parent.parent / '.env',  # root .env
+    Path(__file__).parent.parent / 'auth-backend' / '.env',  # auth-backend/.env
+]
+
+for env_path in env_paths:
+    if env_path.exists():
+        load_dotenv(env_path)
+        print(f"✅ Loaded .env from: {env_path}")
+        break
+else:
+    print("⚠️  No .env file found. Using environment variables or defaults.")
 
 app = Flask(__name__)
 CORS(app)  # Enable CORS for frontend
@@ -27,6 +45,9 @@ MAX_FILE_SIZE = 5 * 1024 * 1024  # 5MB
 
 # JWT Configuration - must match auth-backend JWT_SECRET
 JWT_SECRET = os.environ.get('JWT_SECRET', 'your-secret-key-change-in-production')
+
+if JWT_SECRET == 'your-secret-key-change-in-production':
+    print("⚠️  WARNING: Using default JWT_SECRET. This should match auth-backend JWT_SECRET!")
 
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
@@ -79,6 +100,24 @@ def require_auth(f):
         return f(*args, **kwargs)
     return decorated_function
 
+def optional_auth(f):
+    """Decorator to make authentication optional"""
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        auth_header = request.headers.get('Authorization')
+        if auth_header:
+            success, user_data, error = verify_jwt_token(auth_header)
+            if success:
+                request.user = user_data
+            else:
+                # Invalid token, treat as anonymous
+                request.user = None
+        else:
+            # No token provided, treat as anonymous
+            request.user = None
+        return f(*args, **kwargs)
+    return decorated_function
+
 def require_admin(f):
     """Decorator to require admin role"""
     @wraps(f)
@@ -122,23 +161,28 @@ def health_check():
     return jsonify({'status': 'ok', 'message': 'Turtle API is running'})
 
 @app.route('/api/upload', methods=['POST'])
-@require_auth
+@optional_auth
 def upload_photo():
     """
     Upload photo endpoint
     - Admin: Process immediately and return top 5 matches
-    - Community: Save to review queue with top 5 matches
+    - Community/Anonymous: Save to review queue with top 5 matches
     
-    Requires JWT token in Authorization header. Role is extracted from token.
+    Authentication is optional. If no token is provided, upload is treated as anonymous.
     """
     try:
         if 'file' not in request.files:
             return jsonify({'error': 'No file provided'}), 400
         
-        # Get user role from verified JWT token (not from form data)
+        # Get user data from verified JWT token (if provided)
         user_data = request.user
-        user_role = user_data.get('role', 'community')  # Extract from verified token
-        user_email = user_data.get('email', 'anonymous')
+        if user_data:
+            user_role = user_data.get('role', 'community')
+            user_email = user_data.get('email', 'anonymous')
+        else:
+            # Anonymous upload
+            user_role = 'community'
+            user_email = 'anonymous'
         
         file = request.files['file']
         state = request.form.get('state', '')  # Optional: State where turtle was found
@@ -206,9 +250,14 @@ def upload_photo():
             })
         
         else:
-            # Community: Save to review queue
-            print(f"👤 Community upload: Processing {filename}...")
-            finder_name = user_email.split('@')[0] if '@' in user_email else 'anonymous'
+            # Community or Anonymous: Save to review queue
+            if user_email == 'anonymous':
+                print(f"👤 Anonymous upload: Processing {filename}...")
+                finder_name = 'Anonymous User'
+            else:
+                print(f"👤 Community upload: Processing {filename}...")
+                finder_name = user_email.split('@')[0] if '@' in user_email else 'anonymous'
+            
             user_info = {
                 'finder': finder_name,
                 'email': user_email,

@@ -117,6 +117,9 @@ export default function LoginPage({
       // Fetch full user data
       getCurrentUser()
         .then((user) => {
+          if (!user) {
+            throw new Error('User not found after login');
+          }
           setUserLogin(user);
           notifications.show({
             title: 'Successfully logged in!',

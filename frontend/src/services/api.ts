@@ -111,12 +111,18 @@ export const login = async (data: LoginRequest): Promise<AuthResponse> => {
 };
 
 // Get current user
-export const getCurrentUser = async (): Promise<User> => {
+export const getCurrentUser = async (): Promise<User | null> => {
+  const token = getToken();
+  if (!token) {
+    return null;
+  }
+
   const response = await apiRequest('/auth/me');
 
   if (!response.ok) {
-    if (response.status === 401) {
+    if (response.status === 401 || response.status === 403) {
       removeToken();
+      return null;
     }
     const error = await response.json();
     throw new Error(error.error || 'Failed to get user');
@@ -248,8 +254,8 @@ export interface ApproveReviewResponse {
 // Upload photo (Admin or Community)
 export const uploadTurtlePhoto = async (
   file: File,
-  role: 'admin' | 'community', // Used by frontend for navigation logic, not sent to backend
-  email: string, // Used by frontend, not sent to backend
+  _role: 'admin' | 'community', // Used by frontend for navigation logic, not sent to backend
+  _email: string, // Used by frontend, not sent to backend
   location?: { state: string; location: string }
 ): Promise<UploadPhotoResponse> => {
   const formData = new FormData();
@@ -276,7 +282,13 @@ export const uploadTurtlePhoto = async (
   });
 
   if (!response.ok) {
-    const error = await response.json();
+    if (response.status === 401) {
+      removeToken();
+      // 401 should not happen for uploads anymore since auth is optional
+      // but keep this for backwards compatibility
+      throw new Error('Authentication failed. Please try again.');
+    }
+    const error = await response.json().catch(() => ({ error: 'Upload failed' }));
     throw new Error(error.error || 'Upload failed');
   }
 

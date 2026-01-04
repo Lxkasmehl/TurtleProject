@@ -139,6 +139,7 @@ export function usePhotoUpload({
       }
 
       // Upload to backend API
+      // Authentication is optional - anonymous uploads are allowed
       const userRole: 'admin' | 'community' =
         (role === 'admin' || role === 'community' ? role : null) ||
         (user?.role === 'admin' || user?.role === 'community' ? user.role : null) ||

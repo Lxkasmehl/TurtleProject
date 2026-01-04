@@ -20,10 +20,15 @@ export default function AuthProvider({ children }: AuthProviderProps) {
       if (token) {
         try {
           const user = await getCurrentUser();
-          dispatch(setUser(user));
+          if (user) {
+            dispatch(setUser(user));
+          } else {
+            // Token is invalid or expired, remove it silently
+            removeToken();
+          }
         } catch (error) {
-          // Token is invalid or expired, remove it
-          console.error('Failed to restore session:', error);
+          // Only log unexpected errors (not authentication errors)
+          console.error('Unexpected error during auth check:', error);
           removeToken();
         }
       }
