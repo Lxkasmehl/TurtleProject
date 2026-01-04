@@ -3,8 +3,10 @@ import { useNavigate } from 'react-router-dom';
 import { notifications } from '@mantine/notifications';
 import { IconCheck, IconAlertCircle } from '@tabler/icons-react';
 import { validateFile, getCurrentLocation } from '../services/mockBackend';
-import { BACKEND_IP } from '../utils/imageUtils'; 
-import type { FileWithPath } from '@mantine/dropzone';
+import { BACKEND_IP } from '../utils/imageUtils';
+
+// Define FileWithPath locally to avoid module resolution issues
+type FileWithPath = File & { path: string };
 
 type UploadState = 'idle' | 'uploading' | 'success' | 'error';
 
@@ -100,7 +102,7 @@ export function usePhotoUpload({
       progressIntervalRef.current = null;
     }
 
-    // Simulate progress animation. 
+    // Simulate progress animation.
     // It yields at 90% to indicate we are waiting for the server response.
     progressIntervalRef.current = setInterval(() => {
       setUploadProgress((prev) => {
@@ -161,14 +163,15 @@ export function usePhotoUpload({
 
       if (!response.ok) {
         // Use the server's error message if available
-        const serverErrorMessage = data.message || data.detail || `Server error: ${response.statusText}`;
+        const serverErrorMessage =
+          data.message || data.detail || `Server error: ${response.statusText}`;
         throw new Error(serverErrorMessage);
       }
 
       // If we reach here, the network call and server processing were successful (HTTP 200 OK)
       setUploadProgress(100);
       setUploadState('success');
-      
+
       // We expect Django to return 'message', 'imageId', and 'isDuplicate'
       setUploadResponse(data.message || 'Processing complete!');
       setImageId(data.imageId || null);
@@ -177,12 +180,12 @@ export function usePhotoUpload({
 
       // Handle Admin Duplicate Flow
       if (data.isDuplicate && role === 'admin' && data.duplicateImageId) {
-          navigate(`/admin/turtle-match/${data.duplicateImageId}`);
-          return;
+        navigate(`/admin/turtle-match/${data.duplicateImageId}`);
+        return;
       }
 
       // --- LOGIC FIX HERE ---
-      
+
       // Case 1: We got an Image ID (Immediate Success)
       if (data.imageId) {
         if (onSuccess) onSuccess(data.imageId);
@@ -194,25 +197,24 @@ export function usePhotoUpload({
           icon: <IconCheck size={18} />,
           autoClose: 5000,
         });
-      } 
+      }
       // Case 2: No Image ID, but we got a success message (e.g. Review Queue)
       else if (data.message) {
         notifications.show({
-          title: 'Upload Received', 
+          title: 'Upload Received',
           message: data.message,
           color: 'blue', // Blue indicates info/processing rather than error
           icon: <IconCheck size={18} />,
           autoClose: 5000,
         });
-        
+
         // Optional: Reset form here if you want the user to be able to upload again immediately
-        // handleRemove(); 
+        // handleRemove();
       }
       // Case 3: Neither ID nor Message (Actual Failure)
       else {
         throw new Error('Upload failed: Server returned no ID and no message');
       }
-
     } catch (error: unknown) {
       // Clear interval on error
       if (progressIntervalRef.current) {
@@ -221,7 +223,7 @@ export function usePhotoUpload({
       }
       setUploadProgress(0);
       setUploadState('error');
-      
+
       const errorMessage =
         error && typeof error === 'object' && 'message' in error
           ? (error.message as string)
