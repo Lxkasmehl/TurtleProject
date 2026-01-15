@@ -1,4 +1,6 @@
-# Turtle Project
+# TurtleTracker
+
+**TurtleTracker: A Community-Driven Web Platform for Turtle Population Monitoring Using Image-Based Identification**
 
 A system for identifying turtles through photo upload and automatic matching.
 
@@ -180,3 +182,15 @@ echo "VITE_API_URL=http://localhost:5000/api" >> .env
 
 - See `auth-backend/README.md` for detailed auth backend documentation
 - See `backend/README.md` for detailed turtle backend documentation
+
+## Funding & Acknowledgments
+
+This project was supported by a **K-INBRE Research Training Award** in the spring of 2026.
+
+### Required Acknowledgment
+
+This project was supported by an Institutional Development Award (IDeA) from the National Institute of General Medical Sciences of the National Institutes of Health under grant number **P20 GM103418**.
+
+### NIH Public Access Policy
+
+Any publications acknowledging the K-INBRE grant must be deposited in PubMed Central and have a PMCID# to comply with the NIH public access policy. For more information, visit: https://www.k-inbre.org/pages/k-inbre_fund-opp_award-agreement.html
