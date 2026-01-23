@@ -35,7 +35,7 @@ test.describe('Admin Navigation Tests', () => {
 
     // Should be on Turtle Records page
     await expect(page).toHaveURL('/admin/turtle-records');
-    await expect(page.locator('h1')).toContainText('Turtle Records');
+    await expect(page.locator('h1')).toContainText('Review Queue');
   });
 
   test('should redirect community users away from admin pages', async ({ page }) => {

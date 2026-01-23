@@ -33,6 +33,18 @@ const app = express();
 const PORT = process.env.PORT || 3001;
 const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:5173';
 
+// Health check - must be before CORS to allow Playwright to check readiness
+// This endpoint is used by Playwright to verify the server is ready
+app.get('/api/health', (req, res) => {
+  res.status(200).setHeader('Content-Type', 'application/json');
+  res.json({ status: 'ok', message: 'Turtle Auth Backend API is running' });
+});
+
+// Simple root endpoint for health checks (alternative)
+app.get('/', (req, res) => {
+  res.status(200).json({ status: 'ok' });
+});
+
 // Middleware
 app.use(
   cors({
@@ -62,13 +74,13 @@ app.use('/api/auth', authRoutes);
 app.use('/api/auth', googleAuthRoutes);
 app.use('/api/admin', adminRoutes);
 
-// Health check
-app.get('/api/health', (req, res) => {
-  res.json({ status: 'ok', message: 'Turtle Auth Backend API is running' });
-});
-
 // Start server
-app.listen(PORT, () => {
+const server = app.listen(PORT, () => {
   console.log(`🚀 Auth Server running on http://localhost:${PORT}`);
   console.log(`📝 Environment: ${process.env.NODE_ENV || 'development'}`);
+});
+
+// Ensure server is ready to accept connections
+server.on('listening', () => {
+  console.log(`✅ Server is listening and ready to accept connections`);
 });

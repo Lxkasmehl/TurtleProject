@@ -32,12 +32,12 @@ export default defineConfig({
           localStorage: [
             {
               name: 'hasSeenInstructions',
-              value: 'true'
-            }
-          ]
-        }
-      ]
-    }
+              value: 'true',
+            },
+          ],
+        },
+      ],
+    },
   },
 
   /* Configure projects for major browsers */
@@ -69,12 +69,71 @@ export default defineConfig({
   ],
 
   /* Run your local dev server before starting the tests */
-  webServer: {
-    command: 'npm run dev',
-    url: 'http://localhost:5173',
-    reuseExistingServer: !process.env.CI,
-    timeout: 60 * 1000,
-    stdout: 'pipe',
-    stderr: 'pipe',
-  },
+  webServer: [
+    // Start auth backend first (with test user seeding)
+    {
+      command:
+        process.platform === 'win32'
+          ? 'cd ..\\auth-backend && npm run test:dev'
+          : 'cd ../auth-backend && npm run test:dev',
+      url: 'http://localhost:3001/api/health',
+      reuseExistingServer: !process.env.CI,
+      timeout: 120 * 1000,
+      stdout: 'pipe',
+      stderr: 'pipe',
+      env: {
+        ...process.env,
+        // Test user credentials
+        E2E_ADMIN_EMAIL: process.env.E2E_ADMIN_EMAIL || 'admin@test.com',
+        E2E_ADMIN_PASSWORD: process.env.E2E_ADMIN_PASSWORD || 'testpassword123',
+        E2E_COMMUNITY_EMAIL: process.env.E2E_COMMUNITY_EMAIL || 'community@test.com',
+        E2E_COMMUNITY_PASSWORD: process.env.E2E_COMMUNITY_PASSWORD || 'testpassword123',
+        // Auth backend configuration (with defaults for testing)
+        PORT: process.env.AUTH_PORT || '3001',
+        NODE_ENV: process.env.NODE_ENV || 'test',
+        JWT_SECRET: process.env.JWT_SECRET || 'test-jwt-secret-key-for-e2e-tests-only',
+        SESSION_SECRET:
+          process.env.SESSION_SECRET || 'test-session-secret-key-for-e2e-tests-only',
+        FRONTEND_URL: process.env.FRONTEND_URL || 'http://localhost:5173',
+      },
+    },
+    // Start Flask backend (turtle API server)
+    {
+      command:
+        process.platform === 'win32'
+          ? 'cd ..\\backend && python app.py'
+          : 'cd ../backend && python3 app.py',
+      // Use 127.0.0.1 instead of localhost for more reliable connection
+      // Try health endpoint first, fallback to root if needed
+      url: 'http://127.0.0.1:5000/api/health',
+      reuseExistingServer: !process.env.CI,
+      timeout: 120 * 1000,
+      stdout: 'pipe',
+      stderr: 'pipe',
+      // Health check settings - Playwright will poll this URL until it gets 200
+      // Make sure the endpoint responds quickly
+      env: {
+        ...process.env,
+        // JWT_SECRET must match auth-backend for token verification
+        JWT_SECRET: process.env.JWT_SECRET || 'test-jwt-secret-key-for-e2e-tests-only',
+        PORT: process.env.BACKEND_PORT || '5000',
+        // Disable Flask debug mode for tests to avoid reload issues
+        FLASK_DEBUG: 'false',
+        // Force Python to output immediately (unbuffered)
+        PYTHONUNBUFFERED: '1',
+      },
+    },
+    // Start frontend dev server last (after backends are ready)
+    // Vite should start quickly, but we need to ensure it's fully ready
+    {
+      command: 'npm run dev',
+      url: 'http://localhost:5173',
+      reuseExistingServer: !process.env.CI,
+      timeout: 180 * 1000, // Increased timeout for Vite startup
+      stdout: 'pipe',
+      stderr: 'pipe',
+      // Vite typically starts quickly, but may need more time on first run
+      // The URL check ensures Vite is serving the app before tests start
+    },
+  ],
 });

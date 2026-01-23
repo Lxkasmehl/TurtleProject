@@ -12,6 +12,33 @@ Flask API Server for the Turtle Identification System.
 pip install -r requirements.txt
 ```
 
+## Configuration
+
+1. Create a `.env` file in the `backend` directory (copy from `env.template`):
+
+```bash
+# On Windows (PowerShell)
+Copy-Item env.template .env
+
+# On Linux/Mac
+cp env.template .env
+```
+
+2. Update the `.env` file with your configuration:
+
+```env
+# Server Port (default: 5000)
+PORT=5000
+
+# Flask Debug Mode
+FLASK_DEBUG=true
+
+# JWT Secret - MUST match the JWT_SECRET in auth-backend/.env
+JWT_SECRET=your-secret-key-change-in-production
+```
+
+**Important:** The `JWT_SECRET` must match the `JWT_SECRET` in `auth-backend/.env` so that the Flask backend can verify JWT tokens from the auth-backend.
+
 ## Starting the Server
 
 1. Navigate to the backend directory:
@@ -123,11 +150,26 @@ python clear_uploads.py --review-only
 
 ### Port Already in Use
 
-If port 5000 is already in use, change the port in `app.py`:
+If port 5000 is already in use, change the port in your `.env` file:
 
-```python
-app.run(debug=True, host='0.0.0.0', port=5000)  # Change port here
+```env
+PORT=5001
 ```
+
+Or set it as an environment variable before starting:
+
+```bash
+PORT=5001 python app.py
+```
+
+### Environment Configuration
+
+The backend uses a separate `.env` file that is completely independent from `auth-backend/.env`. The only shared configuration is `JWT_SECRET`, which must match between both backends for authentication to work.
+
+- `backend/.env` - Flask backend configuration (PORT, FLASK_DEBUG, JWT_SECRET)
+- `auth-backend/.env` - Auth backend configuration (PORT, JWT_SECRET, etc.)
+
+These are kept separate to avoid configuration conflicts.
 
 ### Missing Dependencies
 

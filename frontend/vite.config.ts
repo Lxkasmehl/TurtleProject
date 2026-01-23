@@ -7,6 +7,8 @@ export default defineConfig({
   plugins: [react(), tailwindcss()],
   server: {
     host: true, // Listen on all network interfaces
+    port: 5173, // Explicitly set port for consistency
+    strictPort: false, // Allow port to be changed if 5173 is in use
     allowedHosts: [
       '.loca.lt', // Allow all localtunnel subdomains
     ],

@@ -4,39 +4,139 @@ Handles photo uploads, matching, and review queue
 """
 
 import os
+import sys
 import json
 import time
 import jwt
+import threading
+import socket
 from functools import wraps
 from pathlib import Path
 from dotenv import load_dotenv
 from flask import Flask, request, jsonify, send_file
 from flask_cors import CORS
 from werkzeug.utils import secure_filename
+from werkzeug.serving import make_server
 import tempfile
 from turtle_manager import TurtleManager
 
+# Fix Unicode encoding issues on Windows
+if sys.platform == 'win32':
+    # Set stdout/stderr encoding to UTF-8 on Windows
+    try:
+        if hasattr(sys.stdout, 'reconfigure'):
+            sys.stdout.reconfigure(encoding='utf-8')
+        if hasattr(sys.stderr, 'reconfigure'):
+            sys.stderr.reconfigure(encoding='utf-8')
+    except (AttributeError, ValueError, OSError):
+        # If reconfigure fails, try to set encoding via environment
+        # This won't affect current process but helps with subprocesses
+        pass
+
 # Load environment variables from .env file
-# Try to load from backend/.env first, then from root .env
+# Only load backend/.env and root .env - keep auth-backend completely separate
 env_paths = [
-    Path(__file__).parent / '.env',  # backend/.env
-    Path(__file__).parent.parent / '.env',  # root .env
-    Path(__file__).parent.parent / 'auth-backend' / '.env',  # auth-backend/.env
+    Path(__file__).parent / '.env',  # backend/.env (highest priority)
+    Path(__file__).parent.parent / '.env',  # root .env (for shared config like JWT_SECRET)
 ]
 
+# Load .env files in priority order
+env_loaded = False
 for env_path in env_paths:
     if env_path.exists():
-        load_dotenv(env_path)
-        print(f"✅ Loaded .env from: {env_path}")
-        break
-else:
-    print("⚠️  No .env file found. Using environment variables or defaults.")
+        load_dotenv(env_path, override=False)  # Don't override if already set
+        try:
+            print(f"✅ Loaded .env from: {env_path}")
+        except UnicodeEncodeError:
+            print(f"[OK] Loaded .env from: {env_path}")
+        env_loaded = True
+
+if not env_loaded:
+    try:
+        print("⚠️  No .env file found. Using environment variables or defaults.")
+    except UnicodeEncodeError:
+        print("[WARN] No .env file found. Using environment variables or defaults.")
+
+# Ensure PORT is set to 5000 for Flask backend (default)
+if 'PORT' not in os.environ:
+    os.environ['PORT'] = '5000'
+    try:
+        print("🔧 Using default PORT=5000 for Flask backend")
+    except UnicodeEncodeError:
+        print("[CFG] Using default PORT=5000 for Flask backend")
 
 app = Flask(__name__)
 CORS(app)  # Enable CORS for frontend
 
-# Initialize Turtle Manager
-manager = TurtleManager()
+# Add request logging for debugging
+@app.before_request
+def log_request_info():
+    """Log all incoming requests for debugging"""
+    try:
+        print(f"[REQUEST] {request.method} {request.path} - {time.strftime('%Y-%m-%d %H:%M:%S')}", flush=True)
+        sys.stdout.flush()
+    except:
+        pass
+
+# Define health check endpoints BEFORE initializing TurtleManager
+# This ensures the server can respond to health checks immediately
+@app.route('/api/health', methods=['GET'])
+def health_check():
+    """Health check endpoint - available immediately"""
+    try:
+        print(f"[HEALTH] Health endpoint accessed at {time.strftime('%Y-%m-%d %H:%M:%S')}", flush=True)
+        print(f"[HEALTH] Request from: {request.remote_addr}", flush=True)
+        sys.stdout.flush()
+    except:
+        pass
+    manager_status = 'ready' if manager is not None else 'loading'
+    response = jsonify({
+        'status': 'ok', 
+        'message': 'Turtle API is running',
+        'manager': manager_status
+    })
+    # Ensure proper headers for health check
+    response.headers['Content-Type'] = 'application/json'
+    return response
+
+@app.route('/', methods=['GET'])
+def root():
+    """Simple root endpoint for health checks"""
+    try:
+        print(f"[HEALTH] Root endpoint accessed at {time.strftime('%Y-%m-%d %H:%M:%S')}", flush=True)
+        print(f"[HEALTH] Request from: {request.remote_addr}", flush=True)
+        sys.stdout.flush()
+    except:
+        pass
+    response = jsonify({'status': 'ok'})
+    response.headers['Content-Type'] = 'application/json'
+    return response
+
+# Initialize Turtle Manager in background thread to avoid blocking server start
+# This allows the server to start immediately and respond to health checks
+manager = None
+manager_ready = threading.Event()
+
+def initialize_manager():
+    """Initialize Turtle Manager in background thread"""
+    global manager
+    try:
+        manager = TurtleManager()
+        manager_ready.set()
+        try:
+            print("✅ TurtleManager initialized successfully")
+        except UnicodeEncodeError:
+            print("[OK] TurtleManager initialized successfully")
+    except Exception as e:
+        try:
+            print(f"❌ Error initializing TurtleManager: {str(e)}")
+        except UnicodeEncodeError:
+            print(f"[ERROR] Error initializing TurtleManager: {str(e)}")
+        manager_ready.set()  # Set even on error so server can continue
+
+# Start manager initialization in background
+manager_thread = threading.Thread(target=initialize_manager, daemon=True)
+manager_thread.start()
 
 # Configuration
 UPLOAD_FOLDER = tempfile.gettempdir()
@@ -47,7 +147,10 @@ MAX_FILE_SIZE = 5 * 1024 * 1024  # 5MB
 JWT_SECRET = os.environ.get('JWT_SECRET', 'your-secret-key-change-in-production')
 
 if JWT_SECRET == 'your-secret-key-change-in-production':
-    print("⚠️  WARNING: Using default JWT_SECRET. This should match auth-backend JWT_SECRET!")
+    try:
+        print("⚠️  WARNING: Using default JWT_SECRET. This should match auth-backend JWT_SECRET!")
+    except UnicodeEncodeError:
+        print("[WARN] WARNING: Using default JWT_SECRET. This should match auth-backend JWT_SECRET!")
 
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
@@ -155,11 +258,6 @@ def convert_npz_to_image_path(npz_path):
     # If no image found, return original (might be an error case)
     return npz_path
 
-@app.route('/api/health', methods=['GET'])
-def health_check():
-    """Health check endpoint"""
-    return jsonify({'status': 'ok', 'message': 'Turtle API is running'})
-
 @app.route('/api/upload', methods=['POST'])
 @optional_auth
 def upload_photo():
@@ -170,6 +268,13 @@ def upload_photo():
     
     Authentication is optional. If no token is provided, upload is treated as anonymous.
     """
+    # Wait for manager to be ready (with timeout)
+    if not manager_ready.wait(timeout=30):
+        return jsonify({'error': 'TurtleManager is still initializing. Please try again in a moment.'}), 503
+    
+    if manager is None:
+        return jsonify({'error': 'TurtleManager failed to initialize'}), 500
+    
     try:
         if 'file' not in request.files:
             return jsonify({'error': 'No file provided'}), 400
@@ -205,7 +310,10 @@ def upload_photo():
         # Save file temporarily
         filename = secure_filename(file.filename)
         temp_path = os.path.join(UPLOAD_FOLDER, filename)
-        print(f"💾 Saving uploaded file to: {temp_path}")
+        try:
+            print(f"💾 Saving uploaded file to: {temp_path}")
+        except UnicodeEncodeError:
+            print(f"[SAVE] Saving uploaded file to: {temp_path}")
         file.save(temp_path)
         
         if not os.path.exists(temp_path):
@@ -213,9 +321,15 @@ def upload_photo():
         
         if user_role == 'admin':
             # Admin: Process immediately and return matches
-            print(f"🔍 Admin upload: Processing {filename}...")
+            try:
+                print(f"🔍 Admin upload: Processing {filename}...")
+            except UnicodeEncodeError:
+                print(f"[INFO] Admin upload: Processing {filename}...")
             matches = manager.search_for_matches(temp_path)
-            print(f"✅ Found {len(matches)} matches")
+            try:
+                print(f"✅ Found {len(matches)} matches")
+            except UnicodeEncodeError:
+                print(f"[OK] Found {len(matches)} matches")
             
             # Format matches for frontend
             formatted_matches = []
@@ -252,10 +366,16 @@ def upload_photo():
         else:
             # Community or Anonymous: Save to review queue
             if user_email == 'anonymous':
-                print(f"👤 Anonymous upload: Processing {filename}...")
+                try:
+                    print(f"👤 Anonymous upload: Processing {filename}...")
+                except UnicodeEncodeError:
+                    print(f"[USER] Anonymous upload: Processing {filename}...")
                 finder_name = 'Anonymous User'
             else:
-                print(f"👤 Community upload: Processing {filename}...")
+                try:
+                    print(f"👤 Community upload: Processing {filename}...")
+                except UnicodeEncodeError:
+                    print(f"[USER] Community upload: Processing {filename}...")
                 finder_name = user_email.split('@')[0] if '@' in user_email else 'anonymous'
             
             user_info = {
@@ -267,13 +387,19 @@ def upload_photo():
             if state and location:
                 user_info['state'] = state
                 user_info['location'] = location
-                print(f"📍 Location provided: {state}/{location}")
+                try:
+                    print(f"📍 Location provided: {state}/{location}")
+                except UnicodeEncodeError:
+                    print(f"[LOC] Location provided: {state}/{location}")
             
             request_id = manager.create_review_packet(
                 temp_path,
                 user_info=user_info
             )
-            print(f"✅ Review packet created: {request_id}")
+            try:
+                print(f"✅ Review packet created: {request_id}")
+            except UnicodeEncodeError:
+                print(f"[OK] Review packet created: {request_id}")
             
             return jsonify({
                 'success': True,
@@ -284,7 +410,10 @@ def upload_photo():
     except Exception as e:
         import traceback
         error_trace = traceback.format_exc()
-        print(f"❌ Error processing upload: {str(e)}")
+        try:
+            print(f"❌ Error processing upload: {str(e)}")
+        except UnicodeEncodeError:
+            print(f"[ERROR] Error processing upload: {str(e)}")
         print(f"Traceback:\n{error_trace}")
         return jsonify({
             'error': f'Processing failed: {str(e)}',
@@ -302,6 +431,12 @@ def get_review_queue():
     Get all pending review queue items (Admin only)
     Returns list of community uploads waiting for review
     """
+    # Wait for manager to be ready
+    if not manager_ready.wait(timeout=30):
+        return jsonify({'error': 'TurtleManager is still initializing. Please try again in a moment.'}), 503
+    if manager is None:
+        return jsonify({'error': 'TurtleManager failed to initialize'}), 500
+    
     try:
         queue_items = manager.get_review_queue()
         
@@ -375,6 +510,12 @@ def approve_review(request_id):
     Approve a review queue item (Admin only)
     Admin selects which of the 5 matches is the correct one, OR creates a new turtle
     """
+    # Wait for manager to be ready
+    if not manager_ready.wait(timeout=30):
+        return jsonify({'error': 'TurtleManager is still initializing. Please try again in a moment.'}), 503
+    if manager is None:
+        return jsonify({'error': 'TurtleManager failed to initialize'}), 500
+    
     data = request.json
     match_turtle_id = data.get('match_turtle_id')  # The turtle ID that was selected
     new_location = data.get('new_location')  # Optional: if creating new turtle (format: "State/Location")
@@ -401,7 +542,10 @@ def approve_review(request_id):
     except Exception as e:
         import traceback
         error_trace = traceback.format_exc()
-        print(f"❌ Error approving review: {str(e)}")
+        try:
+            print(f"❌ Error approving review: {str(e)}")
+        except UnicodeEncodeError:
+            print(f"[ERROR] Error approving review: {str(e)}")
         print(f"Traceback:\n{error_trace}")
         return jsonify({'error': f'Failed to approve review: {str(e)}'}), 500
 
@@ -427,6 +571,12 @@ def serve_image():
     safe_path = os.path.normpath(decoded_path)
     
     # Check if path is within data directory or temp directory
+    # Wait for manager to be ready
+    if not manager_ready.wait(timeout=5):
+        return jsonify({'error': 'TurtleManager is still initializing'}), 503
+    if manager is None:
+        return jsonify({'error': 'TurtleManager failed to initialize'}), 500
+    
     data_dir = os.path.abspath(os.path.normpath(manager.base_dir))
     temp_dir = os.path.abspath(os.path.normpath(UPLOAD_FOLDER))
     
@@ -468,10 +618,55 @@ def serve_image():
     return send_file(full_path)
 
 if __name__ == '__main__':
-    print("🐢 Starting Turtle API Server...")
-    print("📁 Data directory:", manager.base_dir)
-    print("🌐 Server running on http://localhost:5000")
-    print("🔧 Debug mode: ON")
-    print("⚠️  Make sure FAISS index and vocabulary are loaded!")
-    app.run(debug=True, host='0.0.0.0', port=5000)
+    # Determine if debug mode should be enabled
+    # Disable debug mode for tests to avoid reload issues
+    debug_mode = os.environ.get('FLASK_DEBUG', 'true').lower() == 'true'
+    port = int(os.environ.get('PORT', '5000'))
+    
+    try:
+        print("🐢 Starting Turtle API Server...", flush=True)
+        print(f"[STARTUP] Time: {time.strftime('%Y-%m-%d %H:%M:%S')}", flush=True)
+        print(f"[STARTUP] Port: {port}", flush=True)
+        print(f"[STARTUP] Host: 0.0.0.0", flush=True)
+        print(f"[STARTUP] Debug mode: {debug_mode}", flush=True)
+        if manager is not None:
+            print(f"📁 Data directory: {manager.base_dir}", flush=True)
+        else:
+            print("📁 Data directory: (initializing...)", flush=True)
+        print(f"🌐 Server will be available at http://localhost:{port}", flush=True)
+        print(f"🔧 Debug mode: {'ON' if debug_mode else 'OFF'}", flush=True)
+        print("⚠️  Make sure FAISS index and vocabulary are loaded!", flush=True)
+        print("[STARTUP] About to call app.run()...", flush=True)
+        sys.stdout.flush()
+    except UnicodeEncodeError:
+        print("[TURTLE] Starting Turtle API Server...", flush=True)
+        print(f"[STARTUP] Time: {time.strftime('%Y-%m-%d %H:%M:%S')}", flush=True)
+        print(f"[STARTUP] Port: {port}", flush=True)
+        print(f"[STARTUP] Host: 0.0.0.0", flush=True)
+        print(f"[STARTUP] Debug mode: {debug_mode}", flush=True)
+        if manager is not None:
+            print(f"[DIR] Data directory: {manager.base_dir}", flush=True)
+        else:
+            print("[DIR] Data directory: (initializing...)", flush=True)
+        print(f"[NET] Server will be available at http://localhost:{port}", flush=True)
+        print(f"[CFG] Debug mode: {'ON' if debug_mode else 'OFF'}", flush=True)
+        print("[WARN] Make sure FAISS index and vocabulary are loaded!", flush=True)
+        print("[STARTUP] About to call app.run()...", flush=True)
+        sys.stdout.flush()
+    
+    try:
+        print("[STARTUP] Calling app.run() now - server should start accepting connections...", flush=True)
+        print(f"[STARTUP] Health check will be available at: http://127.0.0.1:{port}/api/health", flush=True)
+        sys.stdout.flush()
+        # Use Werkzeug's development server which prints when ready
+        # This ensures we can see when the server actually starts
+        app.run(debug=debug_mode, host='0.0.0.0', port=port, use_reloader=False)
+        print("[STARTUP] app.run() returned (this shouldn't happen unless server stopped)", flush=True)
+        sys.stdout.flush()
+    except Exception as e:
+        print(f"[ERROR] Exception during app.run(): {str(e)}", flush=True)
+        sys.stdout.flush()
+        import traceback
+        traceback.print_exc()
+        sys.stderr.flush()
 

@@ -62,14 +62,11 @@ test.describe('Admin Photo Upload with Duplicate Detection Tests', () => {
     await page.waitForSelector('button:has-text("Upload Photo")', { timeout: 5000 });
     await clickUploadPhotoButton(page);
 
-    // Wait for success notification (notification title includes emoji)
-    await page.waitForSelector('text=/Upload Successful/i', { timeout: 30000 });
+    // For admin users, successful upload redirects to match page (no notification)
+    await expect(page).toHaveURL(/\/admin\/turtle-match\/img_/, { timeout: 30000 });
 
-    // Wait a bit for the upload to complete and be saved to localStorage
-    await page.waitForTimeout(2000);
-
-    // Reload page (authentication is preserved via localStorage)
-    await page.reload();
+    // Navigate back to home page to continue with duplicate upload test
+    await navigateUsingNav(page, 'Home');
 
     await fileInput.setInputFiles({
       name: 'duplicate-turtle.png',
@@ -92,7 +89,7 @@ test.describe('Admin Photo Upload with Duplicate Detection Tests', () => {
     await expect(page.getByText('Turtle Match Found!')).toBeVisible();
   });
 
-  test('should show success notification on upload', async ({ page }) => {
+  test('should redirect to match page on upload as admin', async ({ page }) => {
     await loginAsAdmin(page);
 
     const filePath = await page.evaluate(() => {
@@ -121,11 +118,8 @@ test.describe('Admin Photo Upload with Duplicate Detection Tests', () => {
     await page.waitForSelector('button:has-text("Upload Photo")', { timeout: 5000 });
     await clickUploadPhotoButton(page);
 
-    // Should see success notification (notification title includes emoji)
-    // Use first() to handle multiple matches (Alert and Notification)
-    await expect(page.getByText(/Upload Successful/i).first()).toBeVisible({
-      timeout: 20000,
-    });
+    // For admin users, successful upload redirects to match page (no notification)
+    await expect(page).toHaveURL(/\/admin\/turtle-match\/img_/, { timeout: 30000 });
   });
 
   test('should show duplicate message when uploading duplicate as admin', async ({
@@ -164,12 +158,11 @@ test.describe('Admin Photo Upload with Duplicate Detection Tests', () => {
     await page.waitForSelector('button:has-text("Upload Photo")', { timeout: 5000 });
     await clickUploadPhotoButton(page);
 
-    // Wait for success notification (notification title includes emoji)
-    await page.waitForSelector('text=/Upload Successful/i', { timeout: 30000 });
-    await page.waitForTimeout(2000);
+    // For admin users, successful upload redirects to match page (no notification)
+    await expect(page).toHaveURL(/\/admin\/turtle-match\/img_/, { timeout: 30000 });
 
-    // Upload duplicate - reload page (authentication is preserved via localStorage)
-    await page.reload();
+    // Navigate back to home page to continue with duplicate upload test
+    await navigateUsingNav(page, 'Home');
 
     await fileInput.setInputFiles({
       name: 'match-turtle.png',
@@ -219,14 +212,8 @@ test.describe('Admin Photo Upload with Duplicate Detection Tests', () => {
     await page.waitForSelector('button:has-text("Upload Photo")', { timeout: 5000 });
     await clickUploadPhotoButton(page);
 
-    // Should see success notification (notification title includes emoji)
-    // Use first() to handle multiple matches (Alert and Notification)
-    await expect(page.getByText(/Upload Successful/i).first()).toBeVisible({
-      timeout: 20000,
-    });
-
-    // Should still be on home page (not redirected for new photos)
-    await expect(page).toHaveURL('/');
+    // For admin users, successful upload redirects to match page (no notification)
+    await expect(page).toHaveURL(/\/admin\/turtle-match\/img_/, { timeout: 30000 });
   });
 
   test('should show upload progress during upload', async ({ page }) => {
@@ -275,11 +262,8 @@ test.describe('Admin Photo Upload with Duplicate Detection Tests', () => {
       await page.waitForSelector('text=/Uploading/i', { timeout: 5000 });
     }
 
-    // Use first() to handle multiple matches (Alert and Notification)
-    // Also check for the success alert in the preview card
-    await expect(page.getByText(/Upload Successful/i).first()).toBeVisible({
-      timeout: 20000,
-    });
+    // For admin users, successful upload redirects to match page (no notification)
+    await expect(page).toHaveURL(/\/admin\/turtle-match\/img_/, { timeout: 30000 });
   });
 
   test('should show photo in Turtle Records after upload', async ({ page }) => {
@@ -311,8 +295,8 @@ test.describe('Admin Photo Upload with Duplicate Detection Tests', () => {
     await page.waitForSelector('button:has-text("Upload Photo")', { timeout: 5000 });
     await clickUploadPhotoButton(page);
 
-    // Wait for success notification (notification title includes emoji)
-    await page.waitForSelector('text=/Upload Successful/i', { timeout: 20000 });
+    // For admin users, successful upload redirects to match page (no notification)
+    await expect(page).toHaveURL(/\/admin\/turtle-match\/img_/, { timeout: 30000 });
 
     // Navigate to Turtle Records
     await openMobileMenuIfPresent(page);
@@ -362,12 +346,11 @@ test.describe('Admin Photo Upload with Duplicate Detection Tests', () => {
     await page.waitForSelector('button:has-text("Upload Photo")', { timeout: 5000 });
     await clickUploadPhotoButton(page);
 
-    // Wait for success notification (notification title includes emoji)
-    await page.waitForSelector('text=/Upload Successful/i', { timeout: 30000 });
-    await page.waitForTimeout(2000);
+    // For admin users, successful upload redirects to match page (no notification)
+    await expect(page).toHaveURL(/\/admin\/turtle-match\/img_/, { timeout: 30000 });
 
-    // Upload duplicate - reload page (authentication is preserved via localStorage)
-    await page.reload();
+    // Navigate back to home page to continue with duplicate upload test
+    await navigateUsingNav(page, 'Home');
 
     await fileInput.setInputFiles({
       name: 'view-all-test.png',
