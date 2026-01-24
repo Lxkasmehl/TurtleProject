@@ -10,18 +10,24 @@ import {
   Center,
   Loader,
   Button,
-  Alert,
   Image,
   Card,
-  Modal,
-  TextInput,
+  Divider,
+  ScrollArea,
 } from '@mantine/core';
-import { IconPhoto, IconCheck, IconArrowLeft, IconPlus } from '@tabler/icons-react';
+import { IconPhoto, IconCheck, IconArrowLeft, IconPlus} from '@tabler/icons-react';
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useUser } from '../hooks/useUser';
-import { type TurtleMatch, getImageUrl, approveReview } from '../services/api';
+import {
+  type TurtleMatch,
+  getImageUrl,
+  approveReview,
+  updateTurtleSheetsData,
+  type TurtleSheetsData,
+} from '../services/api';
 import { notifications } from '@mantine/notifications';
+import { TurtleSheetsDataForm } from '../components/TurtleSheetsDataForm';
 
 interface MatchData {
   request_id: string;
@@ -37,21 +43,15 @@ export default function AdminTurtleMatchPage() {
   const [loading, setLoading] = useState(true);
   const [selectedMatch, setSelectedMatch] = useState<string | null>(null);
   const [processing, setProcessing] = useState(false);
-  const [newTurtleModalOpen, setNewTurtleModalOpen] = useState(false);
-  const [newTurtleData, setNewTurtleData] = useState({
-    state: '',
-    location: '',
-    turtleId: '',
-  });
+  const [sheetsData, setSheetsData] = useState<TurtleSheetsData | null>(null);
+  const [primaryId, setPrimaryId] = useState<string | null>(null);
 
   useEffect(() => {
-    // Check if user is admin
     if (role !== 'admin') {
       navigate('/');
       return;
     }
 
-    // Load match data from localStorage (saved during upload)
     const loadMatchData = () => {
       setLoading(true);
       try {
@@ -60,9 +60,6 @@ export default function AdminTurtleMatchPage() {
           if (stored) {
             const data: MatchData = JSON.parse(stored);
             setMatchData(data);
-          } else {
-            // If not found, show error
-            console.error('Match data not found for:', imageId);
           }
         }
       } catch (error) {
@@ -75,8 +72,38 @@ export default function AdminTurtleMatchPage() {
     loadMatchData();
   }, [imageId, role, navigate]);
 
-  const handleSelectMatch = (turtleId: string) => {
+  const handleSelectMatch = async (turtleId: string) => {
     setSelectedMatch(turtleId);
+    // Initialize with turtle ID - user will select sheet and fill in data
+    setSheetsData({
+      id: turtleId,
+    });
+    setPrimaryId(turtleId);
+  };
+
+  const handleSaveSheetsData = async (data: TurtleSheetsData, sheetName: string) => {
+    if (!selectedMatch) {
+      throw new Error('No turtle selected');
+    }
+
+    const match = matchData?.matches.find((m) => m.turtle_id === selectedMatch);
+    if (!match) {
+      throw new Error('Match not found');
+    }
+
+    const locationParts = match.location.split('/');
+    const state = locationParts.length >= 1 ? locationParts[0] : '';
+    const location = locationParts.length >= 2 ? locationParts.slice(1).join('/') : '';
+    const currentPrimaryId = primaryId || selectedMatch;
+
+    await updateTurtleSheetsData(currentPrimaryId, {
+      sheet_name: sheetName,
+      state,
+      location,
+      turtle_data: data,
+    });
+
+    setSheetsData(data);
   };
 
   const handleConfirmMatch = async () => {
@@ -105,7 +132,6 @@ export default function AdminTurtleMatchPage() {
         uploaded_image_path: matchData.uploaded_image_path,
       });
 
-      // Remove from localStorage
       localStorage.removeItem(`match_${imageId}`);
 
       notifications.show({
@@ -115,7 +141,6 @@ export default function AdminTurtleMatchPage() {
         icon: <IconCheck size={18} />,
       });
 
-      // Navigate back to home
       navigate('/');
     } catch (error) {
       notifications.show({
@@ -128,107 +153,55 @@ export default function AdminTurtleMatchPage() {
     }
   };
 
-  const handleSkip = () => {
-    // Navigate back without confirming
-    navigate('/');
-  };
-
   const handleCreateNewTurtle = async () => {
-    if (!newTurtleData.state || !newTurtleData.location || !newTurtleData.turtleId) {
-      notifications.show({
-        title: 'Error',
-        message: 'Please fill in all fields',
-        color: 'red',
-      });
-      return;
-    }
-
-    if (!imageId) {
-      notifications.show({
-        title: 'Error',
-        message: 'Missing request ID',
-        color: 'red',
-      });
-      return;
-    }
-
-    setProcessing(true);
-    try {
-      // Create new location string in format "State/Location"
-      const newLocation = `${newTurtleData.state}/${newTurtleData.location}`;
-
-      await approveReview(imageId, {
-        new_location: newLocation,
-        new_turtle_id: newTurtleData.turtleId,
-        uploaded_image_path: matchData?.uploaded_image_path,
-      });
-
-      // Remove from localStorage
-      localStorage.removeItem(`match_${imageId}`);
-
-      notifications.show({
-        title: 'Success!',
-        message: `New turtle ${newTurtleData.turtleId} created successfully`,
-        color: 'green',
-        icon: <IconCheck size={18} />,
-      });
-
-      // Navigate back to home
-      navigate('/');
-    } catch (error) {
-      notifications.show({
-        title: 'Error',
-        message: error instanceof Error ? error.message : 'Failed to create new turtle',
-        color: 'red',
-      });
-    } finally {
-      setProcessing(false);
-      setNewTurtleModalOpen(false);
-    }
+    // This will be handled in a new view/modal for creating new turtles
+    // For now, navigate or show a form
+    notifications.show({
+      title: 'Info',
+      message: 'New turtle creation will be implemented',
+      color: 'blue',
+    });
   };
 
   if (role !== 'admin') {
     return null;
   }
 
+  const selectedMatchData = selectedMatch
+    ? matchData?.matches.find((m) => m.turtle_id === selectedMatch)
+    : null;
+
+  const locationParts = selectedMatchData?.location.split('/') || [];
+  const state = locationParts[0] || '';
+  const location = locationParts.slice(1).join('/') || '';
+
   return (
     <Container size='xl' py='xl'>
       <Stack gap='lg'>
         {/* Header */}
         <Paper shadow='sm' p='xl' radius='md' withBorder>
-          <Stack gap='md'>
-            <Group justify='space-between' align='center'>
-              <Group gap='md'>
-                <Button
-                  variant='light'
-                  leftSection={<IconArrowLeft size={16} />}
-                  onClick={() => navigate('/')}
-                >
-                  Back to Upload
-                </Button>
-                <div>
-                  <Title order={1}>Select Best Match 🐢</Title>
-                  <Text size='sm' c='dimmed' mt='xs'>
-                    Review the top 5 matches and select the correct turtle
-                  </Text>
-                </div>
-              </Group>
-              <Badge size='lg' variant='light' color='blue'>
-                {matchData?.matches.length || 0} Matches Found
-              </Badge>
+          <Group justify='space-between' align='center'>
+            <Group gap='md'>
+              <Button
+                variant='light'
+                leftSection={<IconArrowLeft size={16} />}
+                onClick={() => navigate('/')}
+              >
+                Back
+              </Button>
+              <div>
+                <Title order={1}>Turtle Match Review 🐢</Title>
+                <Text size='sm' c='dimmed' mt='xs'>
+                  Select a match and review/edit turtle data
+                </Text>
+              </div>
             </Group>
-          </Stack>
+            <Badge size='lg' variant='light' color='blue'>
+              {matchData?.matches.length || 0} Matches
+            </Badge>
+          </Group>
         </Paper>
 
-        {/* Info Alert */}
-        <Alert title='Select the Best Match' color='blue' radius='md'>
-          <Text size='sm'>
-            The system found {matchData?.matches.length || 0} potential matches. Please
-            review each one and select the turtle that best matches the uploaded photo.
-          </Text>
-        </Alert>
-
-        {/* Loading State */}
         {loading ? (
           <Center py='xl'>
             <Loader size='lg' />
@@ -241,193 +214,189 @@ export default function AdminTurtleMatchPage() {
                 <Text size='lg' c='dimmed' ta='center'>
                   No matches found
                 </Text>
-                <Text size='sm' c='dimmed' ta='center'>
-                  The uploaded photo could not be matched to any existing turtles
-                </Text>
-                <Group gap='md'>
-                  <Button onClick={handleSkip} variant='light'>
-                    Go Back
-                  </Button>
-                  <Button
-                    leftSection={<IconPlus size={16} />}
-                    onClick={() => setNewTurtleModalOpen(true)}
-                  >
-                    Create New Turtle
-                  </Button>
-                </Group>
+                <Button
+                  leftSection={<IconPlus size={16} />}
+                  onClick={handleCreateNewTurtle}
+                >
+                  Create New Turtle
+                </Button>
               </Stack>
             </Center>
           </Paper>
         ) : (
-          <>
-            {/* Uploaded Image */}
-            <Paper shadow='sm' p='md' radius='md' withBorder>
-              <Stack gap='sm'>
-                <Text fw={500}>Uploaded Photo</Text>
-                <Image
-                  src={
-                    matchData.uploaded_image_path
-                      ? getImageUrl(matchData.uploaded_image_path)
-                      : ''
-                  }
-                  alt='Uploaded photo'
-                  radius='md'
-                  style={{ maxHeight: '300px', objectFit: 'contain' }}
-                />
-              </Stack>
-            </Paper>
-
-            {/* Matches */}
-            <Paper shadow='sm' p='md' radius='md' withBorder>
+          <Grid gutter='lg'>
+            {/* Left Column: Uploaded Image & Matches */}
+            <Grid.Col span={{ base: 12, md: 5 }}>
               <Stack gap='md'>
-                <Text fw={500} size='lg'>
-                  Top 5 Matches (Select the best one)
-                </Text>
-                <Grid gutter='md'>
-                  {matchData.matches.map((match, index) => (
-                    <Grid.Col
-                      key={`${match.turtle_id}-${index}`}
-                      span={{ base: 12, md: 6 }}
-                    >
-                      <Card
-                        shadow='sm'
-                        padding='md'
-                        radius='md'
-                        withBorder
-                        style={{
-                          cursor: 'pointer',
-                          border:
-                            selectedMatch === match.turtle_id
-                              ? '2px solid #228be6'
-                              : '1px solid #dee2e6',
-                          backgroundColor:
-                            selectedMatch === match.turtle_id ? '#e7f5ff' : 'white',
-                        }}
-                        onClick={() => handleSelectMatch(match.turtle_id)}
-                      >
-                        <Stack gap='sm'>
-                          <Group justify='space-between'>
-                            <Badge
-                              color={selectedMatch === match.turtle_id ? 'blue' : 'gray'}
-                              size='lg'
-                            >
-                              Rank {index + 1}
-                            </Badge>
-                            {selectedMatch === match.turtle_id && (
-                              <IconCheck size={20} color='#228be6' />
-                            )}
-                          </Group>
-                          <Text fw={500}>Turtle ID: {match.turtle_id}</Text>
-                          <Text size='sm' c='dimmed'>
-                            Location: {match.location}
-                          </Text>
-                          <Text size='sm' c='dimmed'>
-                            Distance: {match.distance.toFixed(4)}
-                          </Text>
-                          {match.file_path && (
-                            <Image
-                              src={getImageUrl(match.file_path)}
-                              alt={`Match ${index + 1}`}
-                              radius='md'
-                              style={{ maxHeight: '200px', objectFit: 'contain' }}
-                            />
-                          )}
-                        </Stack>
-                      </Card>
-                    </Grid.Col>
-                  ))}
-                </Grid>
+                {/* Uploaded Image */}
+                <Paper shadow='sm' p='md' radius='md' withBorder>
+                  <Stack gap='sm'>
+                    <Text fw={500} size='lg'>Uploaded Photo</Text>
+                    <Image
+                      src={
+                        matchData.uploaded_image_path
+                          ? getImageUrl(matchData.uploaded_image_path)
+                          : ''
+                      }
+                      alt='Uploaded photo'
+                      radius='md'
+                      style={{ maxHeight: '400px', objectFit: 'contain' }}
+                    />
+                  </Stack>
+                </Paper>
+
+                {/* Matches List */}
+                <Paper shadow='sm' p='md' radius='md' withBorder>
+                  <Stack gap='md'>
+                    <Text fw={500} size='lg'>
+                      Top 5 Matches
+                    </Text>
+                    <ScrollArea h={400}>
+                      <Stack gap='sm'>
+                        {matchData.matches.map((match, index) => (
+                          <Card
+                            key={`${match.turtle_id}-${index}`}
+                            shadow='sm'
+                            padding='md'
+                            radius='md'
+                            withBorder
+                            style={{
+                              cursor: 'pointer',
+                              border:
+                                selectedMatch === match.turtle_id
+                                  ? '2px solid #228be6'
+                                  : '1px solid #dee2e6',
+                              backgroundColor:
+                                selectedMatch === match.turtle_id ? '#e7f5ff' : 'white',
+                            }}
+                            onClick={() => handleSelectMatch(match.turtle_id)}
+                          >
+                            <Stack gap='xs'>
+                              <Group justify='space-between'>
+                                <Badge
+                                  color={selectedMatch === match.turtle_id ? 'blue' : 'gray'}
+                                  size='lg'
+                                >
+                                  Rank {index + 1}
+                                </Badge>
+                                {selectedMatch === match.turtle_id && (
+                                  <IconCheck size={20} color='#228be6' />
+                                )}
+                              </Group>
+                              <Text fw={500}>Turtle ID: {match.turtle_id}</Text>
+                              <Text size='sm' c='dimmed'>
+                                Location: {match.location}
+                              </Text>
+                              <Text size='sm' c='dimmed'>
+                                Distance: {match.distance.toFixed(4)}
+                              </Text>
+                              {match.file_path && (
+                                <Image
+                                  src={getImageUrl(match.file_path)}
+                                  alt={`Match ${index + 1}`}
+                                  radius='md'
+                                  style={{ maxHeight: '120px', objectFit: 'contain' }}
+                                />
+                              )}
+                            </Stack>
+                          </Card>
+                        ))}
+                      </Stack>
+                    </ScrollArea>
+                  </Stack>
+                </Paper>
               </Stack>
-            </Paper>
+            </Grid.Col>
 
-            {/* Action Buttons */}
-            <Group justify='flex-end' gap='md'>
-              <Button variant='light' onClick={handleSkip} disabled={processing}>
-                Skip
-              </Button>
-              <Button
-                variant='outline'
-                leftSection={<IconPlus size={16} />}
-                onClick={() => setNewTurtleModalOpen(true)}
-                disabled={processing}
-              >
-                Create New Turtle
-              </Button>
-              <Button
-                onClick={handleConfirmMatch}
-                disabled={!selectedMatch || processing}
-                loading={processing}
-              >
-                Confirm Match
-              </Button>
-            </Group>
-          </>
+            {/* Right Column: Selected Match Details & Sheets Data */}
+            <Grid.Col span={{ base: 12, md: 7 }}>
+              {selectedMatch && selectedMatchData ? (
+                <Stack gap='md'>
+                  {/* Selected Match Info */}
+                  <Paper shadow='sm' p='md' radius='md' withBorder>
+                    <Stack gap='sm'>
+                      <Group justify='space-between'>
+                        <Text fw={500} size='lg'>
+                          Selected Match
+                        </Text>
+                        <Badge color='blue' size='lg'>
+                          {matchData.matches.findIndex((m) => m.turtle_id === selectedMatch) + 1}
+                        </Badge>
+                      </Group>
+                      <Divider />
+                      <Grid>
+                        <Grid.Col span={6}>
+                          <Text size='sm' c='dimmed'>Turtle ID</Text>
+                          <Text fw={500}>{selectedMatch}</Text>
+                        </Grid.Col>
+                        <Grid.Col span={6}>
+                          <Text size='sm' c='dimmed'>Location</Text>
+                          <Text fw={500}>{selectedMatchData.location}</Text>
+                        </Grid.Col>
+                        <Grid.Col span={6}>
+                          <Text size='sm' c='dimmed'>Distance</Text>
+                          <Text fw={500}>{selectedMatchData.distance.toFixed(4)}</Text>
+                        </Grid.Col>
+                        {primaryId && (
+                          <Grid.Col span={6}>
+                            <Text size='sm' c='dimmed'>Primary ID</Text>
+                            <Text fw={500}>{primaryId}</Text>
+                          </Grid.Col>
+                        )}
+                      </Grid>
+                    </Stack>
+                  </Paper>
+
+                  {/* Google Sheets Data Form */}
+                  <Paper shadow='sm' p='md' radius='md' withBorder>
+                    <ScrollArea h={600}>
+                      <TurtleSheetsDataForm
+                        initialData={sheetsData || undefined}
+                        sheetName={sheetsData?.sheet_name}
+                        state={state}
+                        location={location}
+                        primaryId={primaryId || undefined}
+                        mode={sheetsData ? 'edit' : 'create'}
+                        onSave={handleSaveSheetsData}
+                      />
+                    </ScrollArea>
+                  </Paper>
+
+                  {/* Action Buttons */}
+                  <Paper shadow='sm' p='md' radius='md' withBorder>
+                    <Group justify='flex-end' gap='md'>
+                      <Button variant='light' onClick={() => navigate('/')} disabled={processing}>
+                        Cancel
+                      </Button>
+                      <Button
+                        onClick={handleConfirmMatch}
+                        disabled={!selectedMatch || processing}
+                        loading={processing}
+                        leftSection={<IconCheck size={16} />}
+                      >
+                        Confirm Match
+                      </Button>
+                    </Group>
+                  </Paper>
+                </Stack>
+              ) : (
+                <Paper shadow='sm' p='xl' radius='md' withBorder>
+                  <Center py='xl'>
+                    <Stack gap='md' align='center'>
+                      <IconPhoto size={64} stroke={1.5} style={{ opacity: 0.3 }} />
+                      <Text size='lg' c='dimmed' ta='center'>
+                        Select a match to view details
+                      </Text>
+                      <Text size='sm' c='dimmed' ta='center'>
+                        Click on any match from the list to see turtle data and Google Sheets information
+                      </Text>
+                    </Stack>
+                  </Center>
+                </Paper>
+              )}
+            </Grid.Col>
+          </Grid>
         )}
-
-        {/* Create New Turtle Modal */}
-        <Modal
-          opened={newTurtleModalOpen}
-          onClose={() => setNewTurtleModalOpen(false)}
-          title='Create New Turtle'
-          size='md'
-        >
-          <Stack gap='md'>
-            <Alert color='blue' radius='md'>
-              <Text size='sm'>
-                Create a new turtle entry for this photo. This will add the turtle to the
-                system with the specified location and ID.
-              </Text>
-            </Alert>
-
-            <TextInput
-              label='Turtle ID'
-              placeholder='e.g., T101, F42'
-              description='Format: Letter + Number (e.g., T101, F42)'
-              value={newTurtleData.turtleId}
-              onChange={(e) =>
-                setNewTurtleData({ ...newTurtleData, turtleId: e.target.value })
-              }
-              required
-            />
-
-            <TextInput
-              label='State'
-              placeholder='e.g., Kansas, Nebraska'
-              value={newTurtleData.state}
-              onChange={(e) =>
-                setNewTurtleData({ ...newTurtleData, state: e.target.value })
-              }
-              required
-            />
-
-            <TextInput
-              label='Location'
-              placeholder='e.g., Topeka, Lawrence'
-              value={newTurtleData.location}
-              onChange={(e) =>
-                setNewTurtleData({ ...newTurtleData, location: e.target.value })
-              }
-              required
-            />
-
-            <Group justify='flex-end' gap='md' mt='md'>
-              <Button
-                variant='light'
-                onClick={() => setNewTurtleModalOpen(false)}
-                disabled={processing}
-              >
-                Cancel
-              </Button>
-              <Button
-                onClick={handleCreateNewTurtle}
-                loading={processing}
-                leftSection={<IconPlus size={16} />}
-              >
-                Create Turtle
-              </Button>
-            </Group>
-          </Stack>
-        </Modal>
       </Stack>
     </Container>
   );
