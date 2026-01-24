@@ -130,9 +130,12 @@ test.describe('Admin Turtle Records Page Tests', () => {
     await openMobileMenuIfPresent(page);
     await page.getByRole('button', { name: 'Turtle Records' }).click();
 
-    // Page should load and show either content or empty state
+    // Verify page has loaded by checking for the heading
+    await expect(page.getByText('Review Queue')).toBeVisible();
+
+    // Page should show either content or empty state (mutually exclusive)
     await expect(
-      page.getByText('No pending reviews').or(page.getByText('Review Queue'))
+      page.getByText('No pending reviews').or(page.locator('button:has-text("Review Matches")'))
     ).toBeVisible({ timeout: 5000 });
   });
 

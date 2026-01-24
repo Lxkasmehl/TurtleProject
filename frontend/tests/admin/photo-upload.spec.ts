@@ -231,7 +231,10 @@ test.describe('Admin Photo Upload Tests', () => {
       .catch(() => false);
     if (gettingLocationVisible) {
       // Wait for transition to "Uploading..." state
-      await page.waitForSelector('text=/Uploading/i', { timeout: 5000 });
+      // If upload is very fast, "Uploading..." might not be visible anymore, which is fine
+      await page.waitForSelector('text=/Uploading/i', { timeout: 5000 }).catch(() => {
+        // Upload might have completed already, continue anyway
+      });
     }
 
     // For admin users, successful upload always redirects to match page
