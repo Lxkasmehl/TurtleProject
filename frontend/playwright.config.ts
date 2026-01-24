@@ -77,7 +77,7 @@ export default defineConfig({
           ? 'cd ..\\auth-backend && npm run test:dev'
           : 'cd ../auth-backend && npm run test:dev',
       url: 'http://localhost:3001/api/health',
-      reuseExistingServer: !process.env.CI,
+      reuseExistingServer: true, // Reuse existing server in CI (started by workflow) and locally
       timeout: 120 * 1000,
       stdout: 'pipe',
       stderr: 'pipe',
@@ -106,7 +106,7 @@ export default defineConfig({
       // Use 127.0.0.1 instead of localhost for more reliable connection
       // Try health endpoint first, fallback to root if needed
       url: 'http://127.0.0.1:5000/api/health',
-      reuseExistingServer: !process.env.CI,
+      reuseExistingServer: true, // Reuse existing server in CI (started by workflow) and locally
       timeout: 120 * 1000,
       stdout: 'pipe',
       stderr: 'pipe',
@@ -128,7 +128,7 @@ export default defineConfig({
     {
       command: 'npm run dev',
       url: 'http://localhost:5173',
-      reuseExistingServer: !process.env.CI,
+      reuseExistingServer: true, // Reuse existing server in CI and locally
       timeout: 180 * 1000, // Increased timeout for Vite startup
       stdout: 'pipe',
       stderr: 'pipe',
