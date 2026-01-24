@@ -68,27 +68,12 @@ if 'PORT' not in os.environ:
 app = Flask(__name__)
 CORS(app)  # Enable CORS for frontend
 
-# Add request logging for debugging
-@app.before_request
-def log_request_info():
-    """Log all incoming requests for debugging"""
-    try:
-        print(f"[REQUEST] {request.method} {request.path} - {time.strftime('%Y-%m-%d %H:%M:%S')}", flush=True)
-        sys.stdout.flush()
-    except:
-        pass
 
 # Define health check endpoints BEFORE initializing TurtleManager
 # This ensures the server can respond to health checks immediately
 @app.route('/api/health', methods=['GET'])
 def health_check():
     """Health check endpoint - available immediately"""
-    try:
-        print(f"[HEALTH] Health endpoint accessed at {time.strftime('%Y-%m-%d %H:%M:%S')}", flush=True)
-        print(f"[HEALTH] Request from: {request.remote_addr}", flush=True)
-        sys.stdout.flush()
-    except:
-        pass
     manager_status = 'ready' if manager is not None else 'loading'
     response = jsonify({
         'status': 'ok', 
@@ -102,12 +87,6 @@ def health_check():
 @app.route('/', methods=['GET'])
 def root():
     """Simple root endpoint for health checks"""
-    try:
-        print(f"[HEALTH] Root endpoint accessed at {time.strftime('%Y-%m-%d %H:%M:%S')}", flush=True)
-        print(f"[HEALTH] Request from: {request.remote_addr}", flush=True)
-        sys.stdout.flush()
-    except:
-        pass
     response = jsonify({'status': 'ok'})
     response.headers['Content-Type'] = 'application/json'
     return response
@@ -310,10 +289,6 @@ def upload_photo():
         # Save file temporarily
         filename = secure_filename(file.filename)
         temp_path = os.path.join(UPLOAD_FOLDER, filename)
-        try:
-            print(f"💾 Saving uploaded file to: {temp_path}")
-        except UnicodeEncodeError:
-            print(f"[SAVE] Saving uploaded file to: {temp_path}")
         file.save(temp_path)
         
         if not os.path.exists(temp_path):
@@ -321,15 +296,7 @@ def upload_photo():
         
         if user_role == 'admin':
             # Admin: Process immediately and return matches
-            try:
-                print(f"🔍 Admin upload: Processing {filename}...")
-            except UnicodeEncodeError:
-                print(f"[INFO] Admin upload: Processing {filename}...")
             matches = manager.search_for_matches(temp_path)
-            try:
-                print(f"✅ Found {len(matches)} matches")
-            except UnicodeEncodeError:
-                print(f"[OK] Found {len(matches)} matches")
             
             # Format matches for frontend
             formatted_matches = []
@@ -366,16 +333,8 @@ def upload_photo():
         else:
             # Community or Anonymous: Save to review queue
             if user_email == 'anonymous':
-                try:
-                    print(f"👤 Anonymous upload: Processing {filename}...")
-                except UnicodeEncodeError:
-                    print(f"[USER] Anonymous upload: Processing {filename}...")
                 finder_name = 'Anonymous User'
             else:
-                try:
-                    print(f"👤 Community upload: Processing {filename}...")
-                except UnicodeEncodeError:
-                    print(f"[USER] Community upload: Processing {filename}...")
                 finder_name = user_email.split('@')[0] if '@' in user_email else 'anonymous'
             
             user_info = {
@@ -387,19 +346,11 @@ def upload_photo():
             if state and location:
                 user_info['state'] = state
                 user_info['location'] = location
-                try:
-                    print(f"📍 Location provided: {state}/{location}")
-                except UnicodeEncodeError:
-                    print(f"[LOC] Location provided: {state}/{location}")
             
             request_id = manager.create_review_packet(
                 temp_path,
                 user_info=user_info
             )
-            try:
-                print(f"✅ Review packet created: {request_id}")
-            except UnicodeEncodeError:
-                print(f"[OK] Review packet created: {request_id}")
             
             return jsonify({
                 'success': True,
@@ -625,44 +576,21 @@ if __name__ == '__main__':
     
     try:
         print("🐢 Starting Turtle API Server...", flush=True)
-        print(f"[STARTUP] Time: {time.strftime('%Y-%m-%d %H:%M:%S')}", flush=True)
-        print(f"[STARTUP] Port: {port}", flush=True)
-        print(f"[STARTUP] Host: 0.0.0.0", flush=True)
-        print(f"[STARTUP] Debug mode: {debug_mode}", flush=True)
+        print(f"🌐 Server will be available at http://localhost:{port}", flush=True)
         if manager is not None:
             print(f"📁 Data directory: {manager.base_dir}", flush=True)
-        else:
-            print("📁 Data directory: (initializing...)", flush=True)
-        print(f"🌐 Server will be available at http://localhost:{port}", flush=True)
-        print(f"🔧 Debug mode: {'ON' if debug_mode else 'OFF'}", flush=True)
-        print("⚠️  Make sure FAISS index and vocabulary are loaded!", flush=True)
-        print("[STARTUP] About to call app.run()...", flush=True)
         sys.stdout.flush()
     except UnicodeEncodeError:
         print("[TURTLE] Starting Turtle API Server...", flush=True)
-        print(f"[STARTUP] Time: {time.strftime('%Y-%m-%d %H:%M:%S')}", flush=True)
-        print(f"[STARTUP] Port: {port}", flush=True)
-        print(f"[STARTUP] Host: 0.0.0.0", flush=True)
-        print(f"[STARTUP] Debug mode: {debug_mode}", flush=True)
+        print(f"[NET] Server will be available at http://localhost:{port}", flush=True)
         if manager is not None:
             print(f"[DIR] Data directory: {manager.base_dir}", flush=True)
-        else:
-            print("[DIR] Data directory: (initializing...)", flush=True)
-        print(f"[NET] Server will be available at http://localhost:{port}", flush=True)
-        print(f"[CFG] Debug mode: {'ON' if debug_mode else 'OFF'}", flush=True)
-        print("[WARN] Make sure FAISS index and vocabulary are loaded!", flush=True)
-        print("[STARTUP] About to call app.run()...", flush=True)
         sys.stdout.flush()
     
     try:
-        print("[STARTUP] Calling app.run() now - server should start accepting connections...", flush=True)
-        print(f"[STARTUP] Health check will be available at: http://127.0.0.1:{port}/api/health", flush=True)
-        sys.stdout.flush()
         # Use Werkzeug's development server which prints when ready
         # This ensures we can see when the server actually starts
         app.run(debug=debug_mode, host='0.0.0.0', port=port, use_reloader=False)
-        print("[STARTUP] app.run() returned (this shouldn't happen unless server stopped)", flush=True)
-        sys.stdout.flush()
     except Exception as e:
         print(f"[ERROR] Exception during app.run(): {str(e)}", flush=True)
         sys.stdout.flush()

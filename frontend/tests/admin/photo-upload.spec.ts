@@ -14,7 +14,7 @@ test.beforeEach(async ({ page }) => {
   });
 });
 
-test.describe('Admin Photo Upload with Duplicate Detection Tests', () => {
+test.describe('Admin Photo Upload Tests', () => {
   test.beforeEach(async ({ page }) => {
     // Clear localStorage before each test
     await page.goto('/');
@@ -25,7 +25,7 @@ test.describe('Admin Photo Upload with Duplicate Detection Tests', () => {
     });
   });
 
-  test('should detect duplicate photo and navigate to match page', async ({
+  test('should navigate to match page after uploading photo', async ({
     page,
     browserName,
   }) => {
@@ -50,7 +50,7 @@ test.describe('Admin Photo Upload with Duplicate Detection Tests', () => {
 
     // Upload first photo
     await fileInput.setInputFiles({
-      name: 'duplicate-turtle.png',
+      name: 'test-turtle.png',
       mimeType: 'image/png',
       buffer: Buffer.from(filePath.split(',')[1], 'base64'),
     });
@@ -62,31 +62,11 @@ test.describe('Admin Photo Upload with Duplicate Detection Tests', () => {
     await page.waitForSelector('button:has-text("Upload Photo")', { timeout: 5000 });
     await clickUploadPhotoButton(page);
 
-    // For admin users, successful upload redirects to match page (no notification)
-    await expect(page).toHaveURL(/\/admin\/turtle-match\/img_/, { timeout: 30000 });
+    // For admin users, successful upload always redirects to match page
+    await expect(page).toHaveURL(/\/admin\/turtle-match\/[^/]+/, { timeout: 30000 });
 
-    // Navigate back to home page to continue with duplicate upload test
-    await navigateUsingNav(page, 'Home');
-
-    await fileInput.setInputFiles({
-      name: 'duplicate-turtle.png',
-      mimeType: 'image/png',
-      buffer: Buffer.from(filePath.split(',')[1], 'base64'),
-    });
-
-    // Grant location permission before uploading (especially important after reload)
-    await grantLocationPermission(page);
-
-    // Wait for preview card to appear and click upload button
-    await page.waitForSelector('button:has-text("Upload Photo")', { timeout: 5000 });
-    await clickUploadPhotoButton(page);
-
-    // Should detect duplicate and navigate to match page immediately
-    // For duplicates, navigation happens without showing notification
-    await expect(page).toHaveURL(/\/admin\/turtle-match\/img_/, { timeout: 30000 });
-
-    // Should see match page
-    await expect(page.getByText('Turtle Match Found!')).toBeVisible();
+    // Should see match page with "Select Best Match" header
+    await expect(page.getByText('Select Best Match')).toBeVisible();
   });
 
   test('should redirect to match page on upload as admin', async ({ page }) => {
@@ -118,11 +98,14 @@ test.describe('Admin Photo Upload with Duplicate Detection Tests', () => {
     await page.waitForSelector('button:has-text("Upload Photo")', { timeout: 5000 });
     await clickUploadPhotoButton(page);
 
-    // For admin users, successful upload redirects to match page (no notification)
-    await expect(page).toHaveURL(/\/admin\/turtle-match\/img_/, { timeout: 30000 });
+    // For admin users, successful upload always redirects to match page
+    await expect(page).toHaveURL(/\/admin\/turtle-match\/[^/]+/, { timeout: 30000 });
+    
+    // Should see match page
+    await expect(page.getByText('Select Best Match')).toBeVisible();
   });
 
-  test('should show duplicate message when uploading duplicate as admin', async ({
+  test('should show matches when uploading photo with existing matches', async ({
     page,
     browserName,
   }) => {
@@ -144,7 +127,7 @@ test.describe('Admin Photo Upload with Duplicate Detection Tests', () => {
 
     const fileInput = page.locator('input[type="file"]:not([capture])').first();
 
-    // Upload first time
+    // Upload photo
     await fileInput.setInputFiles({
       name: 'match-turtle.png',
       mimeType: 'image/png',
@@ -158,32 +141,18 @@ test.describe('Admin Photo Upload with Duplicate Detection Tests', () => {
     await page.waitForSelector('button:has-text("Upload Photo")', { timeout: 5000 });
     await clickUploadPhotoButton(page);
 
-    // For admin users, successful upload redirects to match page (no notification)
-    await expect(page).toHaveURL(/\/admin\/turtle-match\/img_/, { timeout: 30000 });
+    // For admin users, successful upload always redirects to match page
+    await expect(page).toHaveURL(/\/admin\/turtle-match\/[^/]+/, { timeout: 30000 });
 
-    // Navigate back to home page to continue with duplicate upload test
-    await navigateUsingNav(page, 'Home');
-
-    await fileInput.setInputFiles({
-      name: 'match-turtle.png',
-      mimeType: 'image/png',
-      buffer: Buffer.from(filePath.split(',')[1], 'base64'),
-    });
-
-    // Grant location permission before uploading (especially important after reload)
-    await grantLocationPermission(page);
-
-    // Wait for preview card to appear and click upload button
-    await page.waitForSelector('button:has-text("Upload Photo")', { timeout: 5000 });
-    await clickUploadPhotoButton(page);
-
-    // Should navigate to match page which shows duplicate was found
-    // For duplicates, navigation happens immediately without notification
-    await expect(page).toHaveURL(/\/admin\/turtle-match\/img_/, { timeout: 30000 });
-    await expect(page.getByText(/Turtle Match Found!/i)).toBeVisible();
+    // Should see match page header
+    await expect(page.getByText('Select Best Match')).toBeVisible();
+    // Should see either matches section or empty state message
+    const hasMatches = await page.getByText('Top 5 Matches').isVisible().catch(() => false);
+    const hasNoMatches = await page.getByText('No matches found').isVisible().catch(() => false);
+    expect(hasMatches || hasNoMatches).toBe(true);
   });
 
-  test('should upload new photo successfully as admin', async ({ page }) => {
+  test('should upload new photo and navigate to match page as admin', async ({ page }) => {
     await loginAsAdmin(page);
 
     const filePath = await page.evaluate(() => {
@@ -212,8 +181,11 @@ test.describe('Admin Photo Upload with Duplicate Detection Tests', () => {
     await page.waitForSelector('button:has-text("Upload Photo")', { timeout: 5000 });
     await clickUploadPhotoButton(page);
 
-    // For admin users, successful upload redirects to match page (no notification)
-    await expect(page).toHaveURL(/\/admin\/turtle-match\/img_/, { timeout: 30000 });
+    // For admin users, successful upload always redirects to match page
+    await expect(page).toHaveURL(/\/admin\/turtle-match\/[^/]+/, { timeout: 30000 });
+    
+    // Should see match page
+    await expect(page.getByText('Select Best Match')).toBeVisible();
   });
 
   test('should show upload progress during upload', async ({ page }) => {
@@ -262,11 +234,11 @@ test.describe('Admin Photo Upload with Duplicate Detection Tests', () => {
       await page.waitForSelector('text=/Uploading/i', { timeout: 5000 });
     }
 
-    // For admin users, successful upload redirects to match page (no notification)
-    await expect(page).toHaveURL(/\/admin\/turtle-match\/img_/, { timeout: 30000 });
+    // For admin users, successful upload always redirects to match page
+    await expect(page).toHaveURL(/\/admin\/turtle-match\/[^/]+/, { timeout: 30000 });
   });
 
-  test('should show photo in Turtle Records after upload', async ({ page }) => {
+  test('should show photo in review queue after upload', async ({ page }) => {
     await loginAsAdmin(page);
 
     const filePath = await page.evaluate(() => {
@@ -295,21 +267,18 @@ test.describe('Admin Photo Upload with Duplicate Detection Tests', () => {
     await page.waitForSelector('button:has-text("Upload Photo")', { timeout: 5000 });
     await clickUploadPhotoButton(page);
 
-    // For admin users, successful upload redirects to match page (no notification)
-    await expect(page).toHaveURL(/\/admin\/turtle-match\/img_/, { timeout: 30000 });
+    // For admin users, successful upload always redirects to match page
+    await expect(page).toHaveURL(/\/admin\/turtle-match\/[^/]+/, { timeout: 30000 });
 
-    // Navigate to Turtle Records
+    // Navigate to Turtle Records (Review Queue)
     await openMobileMenuIfPresent(page);
     await page.getByRole('button', { name: 'Turtle Records' }).click();
 
-    // Should see the uploaded photo filename in the file info text
-    // Use a more specific locator that finds the file info text (not notification or alert)
-    await expect(page.locator('text=/File: records-test\\.png/')).toBeVisible({
-      timeout: 5000,
-    });
+    // Should see the review queue page
+    await expect(page.getByText('Review Queue')).toBeVisible();
   });
 
-  test('should allow clicking "View All" button to navigate to match page', async ({
+  test('should navigate to match page from review queue', async ({
     page,
     browserName,
   }) => {
@@ -317,7 +286,7 @@ test.describe('Admin Photo Upload with Duplicate Detection Tests', () => {
     test.setTimeout(60000);
     await loginAsAdmin(page);
 
-    // Upload a photo that will have duplicates
+    // Upload a photo
     const filePath = await page.evaluate(() => {
       const canvas = document.createElement('canvas');
       canvas.width = 100;
@@ -332,7 +301,7 @@ test.describe('Admin Photo Upload with Duplicate Detection Tests', () => {
 
     const fileInput = page.locator('input[type="file"]:not([capture])').first();
 
-    // Upload first
+    // Upload photo
     await fileInput.setInputFiles({
       name: 'view-all-test.png',
       mimeType: 'image/png',
@@ -346,49 +315,30 @@ test.describe('Admin Photo Upload with Duplicate Detection Tests', () => {
     await page.waitForSelector('button:has-text("Upload Photo")', { timeout: 5000 });
     await clickUploadPhotoButton(page);
 
-    // For admin users, successful upload redirects to match page (no notification)
-    await expect(page).toHaveURL(/\/admin\/turtle-match\/img_/, { timeout: 30000 });
-
-    // Navigate back to home page to continue with duplicate upload test
-    await navigateUsingNav(page, 'Home');
-
-    await fileInput.setInputFiles({
-      name: 'view-all-test.png',
-      mimeType: 'image/png',
-      buffer: Buffer.from(filePath.split(',')[1], 'base64'),
-    });
-
-    // Grant location permission before uploading (especially important after reload)
-    await grantLocationPermission(page);
-
-    // Wait for preview card to appear and click upload button
-    await page.waitForSelector('button:has-text("Upload Photo")', { timeout: 5000 });
-    await clickUploadPhotoButton(page);
-
-    // For duplicate uploads as admin, navigation happens immediately (no notification)
-    // Should detect duplicate and navigate to match page immediately
-    // For duplicates, navigation happens without showing notification
-    await expect(page).toHaveURL(/\/admin\/turtle-match\/img_/, { timeout: 30000 });
+    // For admin users, successful upload always redirects to match page
+    await expect(page).toHaveURL(/\/admin\/turtle-match\/[^/]+/, { timeout: 30000 });
+    
     // Go back to home using navigation to preserve admin state
     await navigateUsingNav(page, 'Home');
 
-    // Navigate to Turtle Records
+    // Navigate to Turtle Records (Review Queue)
     await openMobileMenuIfPresent(page);
     // Wait for admin role to be set and navigation to be ready
     await page.waitForTimeout(500);
     await page.getByRole('button', { name: 'Turtle Records' }).click();
 
-    // Wait for photo groups to load
+    // Wait for review queue to load
     await page.waitForTimeout(1000);
 
-    // Look for "View All" button in photo groups with duplicates
-    const viewAllButton = page.locator('button:has-text("View All")');
-    const count = await viewAllButton.count();
+    // Look for "Review Matches" button in review queue items
+    const reviewButton = page.locator('button:has-text("Review Matches")');
+    const count = await reviewButton.count();
 
     if (count > 0) {
-      await viewAllButton.first().click();
-      // Should navigate to match page
-      await expect(page).toHaveURL(/\/admin\/turtle-match\/img_/);
+      await reviewButton.first().click();
+      // Should open review modal
+      await expect(page.getByRole('dialog')).toBeVisible();
+      await expect(page.getByRole('heading', { name: 'Review Matches' })).toBeVisible();
     }
   });
 });

@@ -2,7 +2,6 @@ import { test, expect } from '@playwright/test';
 import {
   loginAsAdmin,
   loginAsCommunity,
-  navigateTo,
   grantLocationPermission,
   clickUploadPhotoButton,
 } from '../helpers';
@@ -43,7 +42,7 @@ test.describe('Admin Turtle Match Page Tests', () => {
     });
 
     await fileInput.setInputFiles({
-      name: 'duplicate-test.png',
+      name: 'match-test.png',
       mimeType: 'image/png',
       buffer: Buffer.from(filePath.split(',')[1], 'base64'),
     });
@@ -55,39 +54,22 @@ test.describe('Admin Turtle Match Page Tests', () => {
     await page.waitForSelector('button:has-text("Upload Photo")', { timeout: 5000 });
     await clickUploadPhotoButton(page);
 
-    await expect(page.getByText(/Upload Successful/i).first()).toBeVisible({
-      timeout: 20000,
-    });
-
-    // Wait a moment for photo to be saved to localStorage
-    await page.waitForTimeout(500);
-
-    // Get the image ID from localStorage
-    const imageId = await page.evaluate(() => {
-      const photos = JSON.parse(
-        localStorage.getItem('turtle_project_uploaded_photos') || '[]'
-      );
-      return photos[0]?.imageId;
-    });
-
-    expect(imageId).toBeTruthy();
-
-    // Navigate to match page using client-side navigation (preserves admin role)
-    await navigateTo(page, `/admin/turtle-match/${imageId}`);
+    // Admin is automatically redirected to match page after upload
+    await expect(page).toHaveURL(/\/admin\/turtle-match\/[^/]+/, { timeout: 30000 });
 
     // Wait for page to fully load - the header should always be visible
-    await expect(page.getByText('Turtle Match Found!', { exact: false })).toBeVisible({
+    await expect(page.getByText('Select Best Match', { exact: false })).toBeVisible({
       timeout: 10000,
     });
     await expect(
-      page.getByText('This turtle has been sighted multiple times')
+      page.getByText('Review the top 5 matches and select the correct turtle')
     ).toBeVisible();
   });
 
-  test('should display success alert for turtle identification', async ({ page }) => {
+  test('should display match selection interface', async ({ page }) => {
     await loginAsAdmin(page);
 
-    // Upload a photo and get ID
+    // Upload a photo
     const fileInput = page.locator('input[type="file"]:not([capture])').first();
     const filePath = await page.evaluate(() => {
       const canvas = document.createElement('canvas');
@@ -114,33 +96,29 @@ test.describe('Admin Turtle Match Page Tests', () => {
     await page.waitForSelector('button:has-text("Upload Photo")', { timeout: 5000 });
     await clickUploadPhotoButton(page);
 
-    await expect(page.getByText(/Upload Successful/i).first()).toBeVisible({
-      timeout: 20000,
-    });
+    // Admin is automatically redirected to match page after upload
+    await expect(page).toHaveURL(/\/admin\/turtle-match\/[^/]+/, { timeout: 30000 });
 
-    const imageId = await page.evaluate(() => {
-      const photos = JSON.parse(
-        localStorage.getItem('turtle_project_uploaded_photos') || '[]'
-      );
-      return photos[0]?.imageId;
-    });
-
-    if (imageId) {
-      // Navigate using client-side navigation (preserves admin role)
-      await navigateTo(page, `/admin/turtle-match/${imageId}`);
-
-      // Wait for loading to complete - wait for content to appear
-      await expect(page.getByText('Turtle Identified!')).toBeVisible({ timeout: 10000 });
-      await expect(page.getByText(/This photo matches a turtle/i)).toBeVisible();
-    }
+    // Wait for loading to complete - wait for content to appear
+    await expect(page.getByText('Select Best Match')).toBeVisible({ timeout: 10000 });
+    // Should see either alert with match count or empty state message
+    const hasAlert = await page
+      .getByText(/The system found.*potential matches/i)
+      .isVisible()
+      .catch(() => false);
+    const hasNoMatches = await page
+      .getByText('No matches found')
+      .isVisible()
+      .catch(() => false);
+    expect(hasAlert || hasNoMatches).toBe(true);
   });
 
-  test('should display all duplicate photos', async ({ page, browserName }) => {
+  test('should display uploaded photo and matches', async ({ page, browserName }) => {
     test.skip(browserName === 'webkit', 'Skipping for webkit');
     test.setTimeout(60000);
     await loginAsAdmin(page);
 
-    // Upload first photo
+    // Upload photo
     const fileInput = page.locator('input[type="file"]:not([capture])').first();
     const filePath = await page.evaluate(() => {
       const canvas = document.createElement('canvas');
@@ -154,9 +132,8 @@ test.describe('Admin Turtle Match Page Tests', () => {
       return canvas.toDataURL('image/png');
     });
 
-    // Upload same photo twice to create duplicates
     await fileInput.setInputFiles({
-      name: 'duplicate-photo.png',
+      name: 'match-photo.png',
       mimeType: 'image/png',
       buffer: Buffer.from(filePath.split(',')[1], 'base64'),
     });
@@ -168,43 +145,25 @@ test.describe('Admin Turtle Match Page Tests', () => {
     await page.waitForSelector('button:has-text("Upload Photo")', { timeout: 5000 });
     await clickUploadPhotoButton(page);
 
-    await expect(page.getByText(/Upload Successful/i).first()).toBeVisible({
-      timeout: 30000,
-    });
+    // Admin is automatically redirected to match page after upload
+    await expect(page).toHaveURL(/\/admin\/turtle-match\/[^/]+/, { timeout: 30000 });
 
-    // Upload again (same file) - reload page (authentication is preserved via localStorage)
-    await page.reload();
-
-    // Get fresh file input locator after reload
-    const fileInput2 = page.locator('input[type="file"]:not([capture])').first();
-    await fileInput2.setInputFiles({
-      name: 'duplicate-photo.png',
-      mimeType: 'image/png',
-      buffer: Buffer.from(filePath.split(',')[1], 'base64'),
-    });
-
-    // Grant location permission before uploading (especially important after reload)
-    await grantLocationPermission(page);
-
-    // Wait for preview card to appear and click upload button
-    await page.waitForSelector('button:has-text("Upload Photo")', { timeout: 5000 });
-    await clickUploadPhotoButton(page);
-
-    // For duplicates, it navigates to match page instead of showing notification
-    await page.waitForSelector('text=/Turtle Match Found!/i', { timeout: 30000 });
-
-    // Extract image ID from URL (we're already on the match page)
-    const url = page.url();
-    const imageIdMatch = url.match(/\/admin\/turtle-match\/(.+)$/);
-    const imageId = imageIdMatch ? imageIdMatch[1] : null;
-
-    if (imageId) {
-      // Should see photos displayed (we're already on the match page)
-      await expect(page.locator('text=duplicate-photo.png').first()).toBeVisible();
-    }
+    // Should see match page with uploaded photo
+    await expect(page.getByText('Select Best Match')).toBeVisible({ timeout: 10000 });
+    
+    // Check for uploaded photo section (only visible when matches exist)
+    // or empty state message (when no matches)
+    const uploadedPhotoText = page.getByText('Uploaded Photo', { exact: true });
+    const noMatchesText = page.getByText('No matches found');
+    
+    const hasUploadedPhoto = await uploadedPhotoText.isVisible().catch(() => false);
+    const hasNoMatches = await noMatchesText.isVisible().catch(() => false);
+    
+    // Should see either the uploaded photo section or the empty state
+    expect(hasUploadedPhoto || hasNoMatches).toBe(true);
   });
 
-  test('should display "Most Recent" badge on newest photo', async ({ page }) => {
+  test('should display match cards with rank badges', async ({ page }) => {
     await loginAsAdmin(page);
 
     // Upload a photo
@@ -234,43 +193,59 @@ test.describe('Admin Turtle Match Page Tests', () => {
     await page.waitForSelector('button:has-text("Upload Photo")', { timeout: 5000 });
     await clickUploadPhotoButton(page);
 
-    await expect(page.getByText(/Upload Successful/i).first()).toBeVisible({
-      timeout: 20000,
-    });
+    // Admin is automatically redirected to match page after upload
+    await expect(page).toHaveURL(/\/admin\/turtle-match\/[^/]+/, { timeout: 30000 });
 
-    const imageId = await page.evaluate(() => {
-      const photos = JSON.parse(
-        localStorage.getItem('turtle_project_uploaded_photos') || '[]'
-      );
-      return photos[0]?.imageId;
-    });
+    // Wait for page to load
+    await expect(page.getByText('Select Best Match')).toBeVisible({ timeout: 10000 });
 
-    if (imageId) {
-      // Navigate using client-side navigation (preserves admin role)
-      await navigateTo(page, `/admin/turtle-match/${imageId}`);
-
-      // Wait for page to load - wait for header or loader to disappear
-      await expect(page.getByText('Turtle Match Found!', { exact: false })).toBeVisible({
-        timeout: 10000,
-      });
-
-      // Should see "Most Recent" badge if there are multiple photos
-      const recentBadge = page.locator('text=Most Recent');
-      if ((await recentBadge.count()) > 0) {
-        await expect(recentBadge.first()).toBeVisible();
-      }
+    // Should see either matches with rank badges or empty state
+    const rankBadge = page.locator('text=/Rank \\d+/i');
+    const noMatchesText = page.getByText('No matches found');
+    
+    if ((await rankBadge.count()) > 0) {
+      await expect(rankBadge.first()).toBeVisible();
+    } else {
+      await expect(noMatchesText).toBeVisible();
     }
   });
 
-  test('should display empty state when image ID not found', async ({ page }) => {
+  test('should display empty state when no matches found', async ({ page }) => {
     await loginAsAdmin(page);
 
-    // Navigate to match page with invalid ID using client-side navigation (preserves admin role)
-    await navigateTo(page, '/admin/turtle-match/invalid-image-id');
+    // Upload a photo that likely won't have matches
+    const fileInput = page.locator('input[type="file"]:not([capture])').first();
+    const filePath = await page.evaluate(() => {
+      const canvas = document.createElement('canvas');
+      canvas.width = 100;
+      canvas.height = 100;
+      const ctx = canvas.getContext('2d');
+      if (ctx) {
+        ctx.fillStyle = 'magenta';
+        ctx.fillRect(0, 0, 100, 100);
+      }
+      return canvas.toDataURL('image/png');
+    });
 
-    // Wait for loading to complete - wait for empty state or loader to disappear
-    await expect(page.getByText('No photos found')).toBeVisible({ timeout: 10000 });
-    await expect(page.getByText(/The photo ID could not be found/i)).toBeVisible();
+    await fileInput.setInputFiles({
+      name: 'no-match-test.png',
+      mimeType: 'image/png',
+      buffer: Buffer.from(filePath.split(',')[1], 'base64'),
+    });
+
+    // Grant location permission before uploading
+    await grantLocationPermission(page);
+
+    // Wait for preview card to appear and click upload button
+    await page.waitForSelector('button:has-text("Upload Photo")', { timeout: 5000 });
+    await clickUploadPhotoButton(page);
+
+    // Admin is automatically redirected to match page
+    await expect(page).toHaveURL(/\/admin\/turtle-match\/[^/]+/, { timeout: 30000 });
+
+    // Wait for page to load - should show empty state
+    await expect(page.getByText('Select Best Match')).toBeVisible({ timeout: 10000 });
+    await expect(page.getByText('No matches found')).toBeVisible();
   });
 
   test('should have back button to navigate home', async ({ page }) => {
@@ -303,30 +278,17 @@ test.describe('Admin Turtle Match Page Tests', () => {
     await page.waitForSelector('button:has-text("Upload Photo")', { timeout: 5000 });
     await clickUploadPhotoButton(page);
 
-    await expect(page.getByText(/Upload Successful/i).first()).toBeVisible({
-      timeout: 20000,
+    // Admin is automatically redirected to match page
+    await expect(page).toHaveURL(/\/admin\/turtle-match\/[^/]+/, { timeout: 30000 });
+
+    // Wait for page to load - wait for back button to appear
+    await expect(page.getByRole('button', { name: 'Back to Upload' })).toBeVisible({
+      timeout: 10000,
     });
+    await page.getByRole('button', { name: 'Back to Upload' }).click();
 
-    const imageId = await page.evaluate(() => {
-      const photos = JSON.parse(
-        localStorage.getItem('turtle_project_uploaded_photos') || '[]'
-      );
-      return photos[0]?.imageId;
-    });
-
-    if (imageId) {
-      // Navigate using client-side navigation (preserves admin role)
-      await navigateTo(page, `/admin/turtle-match/${imageId}`);
-
-      // Wait for page to load - wait for back button to appear
-      await expect(page.getByRole('button', { name: 'Back to Upload' })).toBeVisible({
-        timeout: 10000,
-      });
-      await page.getByRole('button', { name: 'Back to Upload' }).click();
-
-      // Should be on home page
-      await expect(page).toHaveURL('/');
-    }
+    // Should be on home page
+    await expect(page).toHaveURL('/');
   });
 
   test('should prevent community users from accessing page', async ({ page }) => {
@@ -339,7 +301,7 @@ test.describe('Admin Turtle Match Page Tests', () => {
     await expect(page).toHaveURL('/');
   });
 
-  test('should display photo information cards', async ({ page }) => {
+  test('should display uploaded photo and match cards', async ({ page }) => {
     await loginAsAdmin(page);
 
     // Upload a photo
@@ -369,36 +331,168 @@ test.describe('Admin Turtle Match Page Tests', () => {
     await page.waitForSelector('button:has-text("Upload Photo")', { timeout: 5000 });
     await clickUploadPhotoButton(page);
 
-    await expect(page.getByText(/Upload Successful/i).first()).toBeVisible({
-      timeout: 20000,
+    // Admin is automatically redirected to match page
+    await expect(page).toHaveURL(/\/admin\/turtle-match\/[^/]+/, { timeout: 30000 });
+
+    // Wait for page to load
+    await expect(page.getByText('Select Best Match')).toBeVisible({ timeout: 10000 });
+
+    // Should see uploaded photo section (only visible when matches exist)
+    // or empty state message (when no matches)
+    const uploadedPhotoText = page.getByText('Uploaded Photo', { exact: true });
+    const noMatchesText = page.getByText('No matches found');
+    
+    const hasUploadedPhoto = await uploadedPhotoText.isVisible().catch(() => false);
+    const hasNoMatches = await noMatchesText.isVisible().catch(() => false);
+    
+    // Should see either the uploaded photo section or the empty state
+    expect(hasUploadedPhoto || hasNoMatches).toBe(true);
+    
+    // Should see either matches section or empty state
+    const topMatchesText = page.getByText('Top 5 Matches');
+    const hasTopMatches = await topMatchesText.isVisible().catch(() => false);
+    expect(hasTopMatches || hasNoMatches).toBe(true);
+  });
+
+  test('should allow selecting a match', async ({ page }) => {
+    await loginAsAdmin(page);
+
+    // Upload a photo
+    const fileInput = page.locator('input[type="file"]:not([capture])').first();
+    const filePath = await page.evaluate(() => {
+      const canvas = document.createElement('canvas');
+      canvas.width = 100;
+      canvas.height = 100;
+      const ctx = canvas.getContext('2d');
+      if (ctx) {
+        ctx.fillStyle = 'lime';
+        ctx.fillRect(0, 0, 100, 100);
+      }
+      return canvas.toDataURL('image/png');
     });
 
-    const imageId = await page.evaluate(() => {
-      const photos = JSON.parse(
-        localStorage.getItem('turtle_project_uploaded_photos') || '[]'
-      );
-      return photos[0]?.imageId;
+    await fileInput.setInputFiles({
+      name: 'select-match-test.png',
+      mimeType: 'image/png',
+      buffer: Buffer.from(filePath.split(',')[1], 'base64'),
     });
 
-    if (imageId) {
-      // Navigate using client-side navigation (preserves admin role)
-      await navigateTo(page, `/admin/turtle-match/${imageId}`);
+    await grantLocationPermission(page);
+    await page.waitForSelector('button:has-text("Upload Photo")', { timeout: 5000 });
+    await clickUploadPhotoButton(page);
 
-      // Wait for page to load - wait for photo or header to appear
-      await expect(page.getByText('Turtle Match Found!', { exact: false })).toBeVisible({
-        timeout: 10000,
-      });
+    // Wait for match page
+    await expect(page).toHaveURL(/\/admin\/turtle-match\/[^/]+/, { timeout: 30000 });
+    await expect(page.getByText('Select Best Match')).toBeVisible({ timeout: 10000 });
 
-      // Should see photo card with information
-      // Note: The filename appears in both the notification and the PhotoCard
-      // Use .first() to get the first match (notification will disappear after 5s)
-      // Or wait for notification to disappear, then check for the photo card text
-      await page.waitForTimeout(6000); // Wait for notification to auto-close (5000ms)
+    // Look for match cards
+    const matchCard = page.locator('text=/Turtle ID:/i').first();
+    if (await matchCard.isVisible().catch(() => false)) {
+      // Click on a match card to select it
+      await matchCard.click();
 
-      // Now only the PhotoCard text should be visible
-      await expect(page.getByText('info-test.png')).toBeVisible({ timeout: 10000 });
-      await expect(page.getByText(/File Name/i)).toBeVisible();
-      await expect(page.getByText(/Upload Date/i)).toBeVisible();
+      // Should see confirm button enabled
+      await expect(page.getByRole('button', { name: 'Confirm Match' })).toBeEnabled();
+    } else {
+      // If no matches, should see empty state
+      await expect(page.getByText('No matches found')).toBeVisible();
     }
+  });
+
+  test('should allow creating new turtle', async ({ page }) => {
+    await loginAsAdmin(page);
+
+    // Upload a photo
+    const fileInput = page.locator('input[type="file"]:not([capture])').first();
+    const filePath = await page.evaluate(() => {
+      const canvas = document.createElement('canvas');
+      canvas.width = 100;
+      canvas.height = 100;
+      const ctx = canvas.getContext('2d');
+      if (ctx) {
+        ctx.fillStyle = 'coral';
+        ctx.fillRect(0, 0, 100, 100);
+      }
+      return canvas.toDataURL('image/png');
+    });
+
+    await fileInput.setInputFiles({
+      name: 'new-turtle-test.png',
+      mimeType: 'image/png',
+      buffer: Buffer.from(filePath.split(',')[1], 'base64'),
+    });
+
+    await grantLocationPermission(page);
+    await page.waitForSelector('button:has-text("Upload Photo")', { timeout: 5000 });
+    await clickUploadPhotoButton(page);
+
+    // Wait for match page
+    await expect(page).toHaveURL(/\/admin\/turtle-match\/[^/]+/, { timeout: 30000 });
+    await expect(page.getByText('Select Best Match')).toBeVisible({ timeout: 10000 });
+
+    // Click "Create New Turtle" button
+    const createButton = page.getByRole('button', { name: 'Create New Turtle' });
+    await expect(createButton).toBeVisible();
+    await createButton.click();
+
+    // Should see modal for creating new turtle
+    await expect(page.getByRole('dialog')).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Create New Turtle' })).toBeVisible();
+
+    // Should see form fields
+    await expect(page.getByLabel('Turtle ID')).toBeVisible();
+    await expect(page.getByLabel('State')).toBeVisible();
+    await expect(page.getByLabel('Location')).toBeVisible();
+  });
+
+  test('should show skip button', async ({ page }) => {
+    await loginAsAdmin(page);
+
+    // Upload a photo
+    const fileInput = page.locator('input[type="file"]:not([capture])').first();
+    const filePath = await page.evaluate(() => {
+      const canvas = document.createElement('canvas');
+      canvas.width = 100;
+      canvas.height = 100;
+      const ctx = canvas.getContext('2d');
+      if (ctx) {
+        ctx.fillStyle = 'indigo';
+        ctx.fillRect(0, 0, 100, 100);
+      }
+      return canvas.toDataURL('image/png');
+    });
+
+    await fileInput.setInputFiles({
+      name: 'skip-test.png',
+      mimeType: 'image/png',
+      buffer: Buffer.from(filePath.split(',')[1], 'base64'),
+    });
+
+    await grantLocationPermission(page);
+    await page.waitForSelector('button:has-text("Upload Photo")', { timeout: 5000 });
+    await clickUploadPhotoButton(page);
+
+    // Wait for match page
+    await expect(page).toHaveURL(/\/admin\/turtle-match\/[^/]+/, { timeout: 30000 });
+    await expect(page.getByText('Select Best Match')).toBeVisible({ timeout: 10000 });
+
+    // Should see skip/go back button (Skip when matches exist, Go Back when no matches)
+    // Both buttons call the same handleSkip function
+    const skipButton = page.getByRole('button', { name: 'Skip' });
+    const goBackButton = page.getByRole('button', { name: 'Go Back' });
+    
+    const hasSkip = await skipButton.isVisible().catch(() => false);
+    const hasGoBack = await goBackButton.isVisible().catch(() => false);
+    
+    expect(hasSkip || hasGoBack).toBe(true);
+    
+    if (hasSkip) {
+      await skipButton.click();
+    } else {
+      await goBackButton.click();
+    }
+
+    // Should navigate back to home
+    await expect(page).toHaveURL('/');
   });
 });

@@ -4,7 +4,6 @@ import {
   loginAsAdmin,
   loginAsCommunity,
   grantLocationPermission,
-  clickUploadPhotoButton,
 } from '../helpers';
 
 test.beforeEach(async ({ page }) => {
@@ -24,149 +23,116 @@ test.describe('Admin Turtle Records Page Tests', () => {
     });
   });
 
-  test('should display empty state when no photos uploaded', async ({ page }) => {
+  test('should display empty state when no pending reviews', async ({ page }) => {
     await loginAsAdmin(page);
 
-    // Navigate to Turtle Records using navigation
+    // Mock the API to return an empty review queue
+    await page.route('**/api/review-queue', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ success: true, items: [] }),
+      });
+    });
+
+    // Navigate to Turtle Records (Review Queue) using navigation
     await openMobileMenuIfPresent(page);
     await page.getByRole('button', { name: 'Turtle Records' }).click();
 
-    // Should see empty state
-    await expect(page.getByText('No turtle photos uploaded yet')).toBeVisible();
+    // Should see empty state for review queue
+    await expect(page.getByText('No pending reviews')).toBeVisible();
     await expect(
-      page.getByText('Upload turtle photos from the home page to see them here')
+      page.getByText('All community uploads have been reviewed')
     ).toBeVisible();
   });
 
-  test('should display photo count badge', async ({ page }) => {
+  test('should display pending count badge', async ({ page }) => {
     await loginAsAdmin(page);
 
-    // Navigate to Turtle Records using navigation
+    // Navigate to Turtle Records (Review Queue) using navigation
     await openMobileMenuIfPresent(page);
     await page.getByRole('button', { name: 'Turtle Records' }).click();
 
-    // Should see photo count badge (even if 0)
-    const badge = page.locator('text=/\\d+ Photo/i');
+    // Should see pending count badge (even if 0)
+    const badge = page.locator('text=/\\d+ Pending/i');
     await expect(badge).toBeVisible();
   });
 
-  test('should display photo quality notice', async ({ page }) => {
+  test('should display community uploads info alert', async ({ page }) => {
     await loginAsAdmin(page);
 
-    // Navigate to Turtle Records using navigation
+    // Navigate to Turtle Records (Review Queue) using navigation
     await openMobileMenuIfPresent(page);
     await page.getByRole('button', { name: 'Turtle Records' }).click();
 
-    // Should see photo quality notice
-    await expect(page.getByText('Photo Quality Notice')).toBeVisible();
-    await expect(page.getByText(/localStorage as a mock backend/i)).toBeVisible();
+    // Should see community uploads info alert - target the Alert component specifically
+    const alert = page.getByRole('alert');
+    await expect(alert.getByText('Community Uploads')).toBeVisible();
+    await expect(
+      page.getByText(/These photos were uploaded by community members/i)
+    ).toBeVisible();
   });
 
-  test('should display uploaded photos', async ({ page }) => {
-    // First, upload a photo as admin
+  test('should display review queue items', async ({ page }) => {
     await loginAsAdmin(page);
 
-    // Create a test image file
-    const fileInput = page.locator('input[type="file"]:not([capture])').first();
-    const filePath = await page.evaluate(() => {
-      // Create a minimal test image
-      const canvas = document.createElement('canvas');
-      canvas.width = 100;
-      canvas.height = 100;
-      const ctx = canvas.getContext('2d');
-      if (ctx) {
-        ctx.fillStyle = 'blue';
-        ctx.fillRect(0, 0, 100, 100);
-      }
-      const dataUrl = canvas.toDataURL('image/png');
-      return dataUrl;
-    });
-
-    // Upload via file input (simulate file upload)
-    await fileInput.setInputFiles({
-      name: 'test-turtle.png',
-      mimeType: 'image/png',
-      buffer: Buffer.from(filePath.split(',')[1], 'base64'),
-    });
-
-    // Grant location permission before uploading (especially important after reload)
-    await grantLocationPermission(page);
-
-    // Wait for preview card to appear and click upload button
-    await page.waitForSelector('button:has-text("Upload Photo")', { timeout: 5000 });
-    await clickUploadPhotoButton(page);
-
-    // Wait for upload to complete
-    await page.waitForSelector('text=/Upload Successful/i', { timeout: 20000 });
-
-    // Navigate to Turtle Records page
+    // Navigate to Turtle Records (Review Queue) page
     await openMobileMenuIfPresent(page);
     await page.getByRole('button', { name: 'Turtle Records' }).click();
 
-    // Should see the uploaded photo (use first() to avoid strict mode violation with notification text)
-    await expect(page.getByText('test-turtle.png').first()).toBeVisible();
+    // Should see review queue page
+    await expect(page.getByText('Review Queue')).toBeVisible();
+
+    // Should see either review items or empty state
+    await expect(
+      page.getByText('No pending reviews').or(page.locator('button:has-text("Review Matches")'))
+    ).toBeVisible();
   });
 
-  test('should open photo detail modal when clicking on photo', async ({ page }) => {
-    // Upload a photo first
+  test('should open review modal when clicking review button', async ({ page }) => {
     await loginAsAdmin(page);
 
-    const fileInput = page.locator('input[type="file"]:not([capture])').first();
-    const filePath = await page.evaluate(() => {
-      const canvas = document.createElement('canvas');
-      canvas.width = 100;
-      canvas.height = 100;
-      const ctx = canvas.getContext('2d');
-      if (ctx) {
-        ctx.fillStyle = 'green';
-        ctx.fillRect(0, 0, 100, 100);
-      }
-      return canvas.toDataURL('image/png');
-    });
-
-    await fileInput.setInputFiles({
-      name: 'test-photo.png',
-      mimeType: 'image/png',
-      buffer: Buffer.from(filePath.split(',')[1], 'base64'),
-    });
-
-    // Grant location permission before uploading (especially important after reload)
-    await grantLocationPermission(page);
-
-    // Wait for preview card to appear and click upload button
-    await page.waitForSelector('button:has-text("Upload Photo")', { timeout: 5000 });
-    await clickUploadPhotoButton(page);
-
-    await page.waitForSelector('text=/Upload Successful/i', { timeout: 20000 });
-
-    // Navigate to Turtle Records
+    // Navigate to Turtle Records (Review Queue)
     await openMobileMenuIfPresent(page);
     await page.getByRole('button', { name: 'Turtle Records' }).click();
 
-    // Wait for photo image to appear (wait for the element we'll interact with)
-    await expect(page.getByRole('img', { name: 'test-photo.png' })).toBeVisible({
-      timeout: 5000,
-    });
+    // Wait for page to load
+    await expect(page.getByText('Review Queue')).toBeVisible();
 
-    // Click on photo card (click the image, not the text - the image is the clickable element)
-    await page.getByRole('img', { name: 'test-photo.png' }).click();
+    // Wait for either review items or empty state to appear
+    await expect(
+      page.getByText('No pending reviews').or(page.locator('button:has-text("Review Matches")'))
+    ).toBeVisible({ timeout: 5000 });
 
-    // Should see modal with photo details (check modal dialog and heading)
-    await expect(page.getByRole('dialog')).toBeVisible();
-    await expect(page.getByRole('heading', { name: 'test-photo.png' })).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Close' })).toBeVisible();
+    // Look for review buttons
+    const reviewButton = page.locator('button:has-text("Review Matches")');
+    const count = await reviewButton.count();
+
+    if (count > 0) {
+      // Click on review button
+      await reviewButton.first().click();
+
+      // Should see review modal
+      await expect(page.getByRole('dialog')).toBeVisible();
+      await expect(page.getByRole('heading', { name: 'Review Matches' })).toBeVisible();
+      await expect(page.getByText('Uploaded Photo')).toBeVisible();
+      await expect(page.getByText('Top 5 Matches')).toBeVisible();
+    } else {
+      // If no items, just verify empty state
+      await expect(page.getByText('No pending reviews')).toBeVisible();
+    }
   });
 
-  test('should show loading state while fetching photos', async ({ page }) => {
+  test('should show loading state while fetching review queue', async ({ page }) => {
     await loginAsAdmin(page);
 
-    // Navigate to Turtle Records using navigation
+    // Navigate to Turtle Records (Review Queue) using navigation
     await openMobileMenuIfPresent(page);
     await page.getByRole('button', { name: 'Turtle Records' }).click();
 
     // Page should load and show either content or empty state
     await expect(
-      page.getByText('No turtle photos uploaded yet').or(page.locator('h1'))
+      page.getByText('No pending reviews').or(page.getByText('Review Queue'))
     ).toBeVisible({ timeout: 5000 });
   });
 
@@ -182,26 +148,167 @@ test.describe('Admin Turtle Records Page Tests', () => {
     await expect(page).toHaveURL('/');
   });
 
-  test('should expand/collapse duplicate photo groups', async ({ page }) => {
-    // This test requires uploading duplicate photos
-    // For now, we'll test the UI structure
+  test('should display match candidates in review modal', async ({ page }) => {
     await loginAsAdmin(page);
 
-    // Navigate to Turtle Records using navigation
+    // Navigate to Turtle Records (Review Queue)
     await openMobileMenuIfPresent(page);
     await page.getByRole('button', { name: 'Turtle Records' }).click();
 
-    // If there are duplicate photos, test expand/collapse
-    // This would require setting up test data with duplicates
-    const expandButtons = page.locator('button:has-text("Additional Sighting")');
-    const count = await expandButtons.count();
+    // Wait for page to load
+    await expect(page.getByText('Review Queue')).toBeVisible();
+
+    // Wait for either review items or empty state to appear
+    await expect(
+      page.getByText('No pending reviews').or(page.locator('button:has-text("Review Matches")'))
+    ).toBeVisible({ timeout: 5000 });
+
+    // Look for review buttons
+    const reviewButton = page.locator('button:has-text("Review Matches")');
+    const count = await reviewButton.count();
 
     if (count > 0) {
-      // Click to expand
-      await expandButtons.first().click();
+      // Click on review button
+      await reviewButton.first().click();
 
-      // Should see expanded content
-      await expect(page.locator('text=/Total/i')).toBeVisible();
+      // Should see review modal with matches
+      await expect(page.getByRole('dialog')).toBeVisible();
+      await expect(page.getByText('Top 5 Matches')).toBeVisible();
+
+      // Should see match cards with rank badges
+      const rankBadge = page.locator('text=/Rank \\d+/i');
+      if ((await rankBadge.count()) > 0) {
+        await expect(rankBadge.first()).toBeVisible();
+      }
+
+      // Should see action buttons
+      await expect(
+        page.getByRole('button', { name: /Select This Match|Create New Turtle/i }).first()
+      ).toBeVisible();
+    } else {
+      // If no items, just verify empty state
+      await expect(page.getByText('No pending reviews')).toBeVisible();
+    }
+  });
+
+  test('should allow selecting a match from review modal', async ({ page }) => {
+    await loginAsAdmin(page);
+
+    // Navigate to Turtle Records (Review Queue)
+    await openMobileMenuIfPresent(page);
+    await page.getByRole('button', { name: 'Turtle Records' }).click();
+
+    await expect(page.getByText('Review Queue')).toBeVisible();
+
+    // Wait for either review items or empty state to appear
+    await expect(
+      page.getByText('No pending reviews').or(page.locator('button:has-text("Review Matches")'))
+    ).toBeVisible({ timeout: 5000 });
+
+    // Look for review buttons
+    const reviewButton = page.locator('button:has-text("Review Matches")');
+    const count = await reviewButton.count();
+
+    if (count > 0) {
+      await reviewButton.first().click();
+
+      // Wait for modal
+      await expect(page.getByRole('dialog')).toBeVisible();
+
+      // Look for "Select This Match" buttons
+      const selectButtons = page.locator('button:has-text("Select This Match")');
+      const selectCount = await selectButtons.count();
+
+      if (selectCount > 0) {
+        // Should be able to click select button
+        await expect(selectButtons.first()).toBeVisible();
+      }
+    } else {
+      // If no items, just verify empty state
+      await expect(page.getByText('No pending reviews')).toBeVisible();
+    }
+  });
+
+  test('should allow creating new turtle from review modal', async ({ page }) => {
+    await loginAsAdmin(page);
+
+    // Navigate to Turtle Records (Review Queue)
+    await openMobileMenuIfPresent(page);
+    await page.getByRole('button', { name: 'Turtle Records' }).click();
+
+    await expect(page.getByText('Review Queue')).toBeVisible();
+
+    // Wait for either review items or empty state to appear
+    await expect(
+      page.getByText('No pending reviews').or(page.locator('button:has-text("Review Matches")'))
+    ).toBeVisible({ timeout: 5000 });
+
+    // Look for review buttons
+    const reviewButton = page.locator('button:has-text("Review Matches")');
+    const count = await reviewButton.count();
+
+    if (count > 0) {
+      await reviewButton.first().click();
+
+      // Wait for modal
+      await expect(page.getByRole('dialog')).toBeVisible();
+
+      // Click "Create New Turtle" button
+      const createButton = page.getByRole('button', { name: 'Create New Turtle' });
+      await expect(createButton).toBeVisible();
+      await createButton.click();
+
+      // Should see create new turtle modal
+      await expect(page.getByRole('heading', { name: 'Create New Turtle' })).toBeVisible();
+
+      // Should see form fields
+      await expect(page.getByLabel('Turtle ID')).toBeVisible();
+      await expect(page.getByLabel('State')).toBeVisible();
+      await expect(page.getByLabel('Location')).toBeVisible();
+    } else {
+      // If no items, just verify empty state
+      await expect(page.getByText('No pending reviews')).toBeVisible();
+    }
+  });
+
+  test('should display match information in review modal', async ({ page }) => {
+    await loginAsAdmin(page);
+
+    // Navigate to Turtle Records (Review Queue)
+    await openMobileMenuIfPresent(page);
+    await page.getByRole('button', { name: 'Turtle Records' }).click();
+
+    await expect(page.getByText('Review Queue')).toBeVisible();
+
+    // Wait for either review items or empty state to appear
+    await expect(
+      page.getByText('No pending reviews').or(page.locator('button:has-text("Review Matches")'))
+    ).toBeVisible({ timeout: 5000 });
+
+    // Look for review buttons
+    const reviewButton = page.locator('button:has-text("Review Matches")');
+    const count = await reviewButton.count();
+
+    if (count > 0) {
+      await reviewButton.first().click();
+
+      // Wait for modal
+      await expect(page.getByRole('dialog')).toBeVisible();
+
+      // Should see uploaded photo section
+      await expect(page.getByText('Uploaded Photo')).toBeVisible();
+
+      // Should see matches section
+      await expect(page.getByText('Top 5 Matches')).toBeVisible();
+
+      // Should see match cards with turtle IDs
+      const turtleIdText = page.locator('text=/Turtle ID:/i');
+      if ((await turtleIdText.count()) > 0) {
+        await expect(turtleIdText.first()).toBeVisible();
+      }
+    } else {
+      // If no items, just verify empty state
+      await expect(page.getByText('No pending reviews')).toBeVisible();
     }
   });
 });

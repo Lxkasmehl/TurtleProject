@@ -120,7 +120,6 @@ class TurtleManager:
                         'status': 'pending'  # If it's in this folder, it is pending
                     })
 
-        print(f"📋 Review Queue Loaded: {len(queue_items)} pending items.")
         return queue_items
 
 
