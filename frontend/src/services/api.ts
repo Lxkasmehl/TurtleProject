@@ -244,6 +244,7 @@ export interface ApproveReviewRequest {
   new_location?: string;
   new_turtle_id?: string;
   uploaded_image_path?: string;
+  sheets_data?: TurtleSheetsData;
 }
 
 export interface ApproveReviewResponse {
@@ -532,7 +533,8 @@ export const updateTurtleSheetsData = async (
 
 // Generate a new primary ID
 export const generatePrimaryId = async (
-  data: GeneratePrimaryIdRequest
+  data: GeneratePrimaryIdRequest,
+  timeoutMs: number = 15000
 ): Promise<GeneratePrimaryIdResponse> => {
   const token = getToken();
   const headers: Record<string, string> = {
@@ -543,22 +545,37 @@ export const generatePrimaryId = async (
     headers['Authorization'] = `Bearer ${token}`;
   }
 
-  const response = await fetch(`${TURTLE_API_BASE_URL}/sheets/generate-primary-id`, {
-    method: 'POST',
-    headers,
-    body: JSON.stringify(data),
-  });
+  // Create an AbortController for timeout
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
-  if (!response.ok) {
-    const error = await response.json();
-    throw new Error(error.error || 'Failed to generate primary ID');
+  try {
+    const response = await fetch(`${TURTLE_API_BASE_URL}/sheets/generate-primary-id`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(data),
+      signal: controller.signal,
+    });
+
+    clearTimeout(timeoutId);
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Failed to generate primary ID');
+    }
+
+    return await response.json();
+  } catch (error) {
+    clearTimeout(timeoutId);
+    if (error instanceof Error && error.name === 'AbortError') {
+      throw new Error(`Request timeout after ${timeoutMs}ms`);
+    }
+    throw error;
   }
-
-  return await response.json();
 };
 
 // List all available sheets
-export const listSheets = async (): Promise<ListSheetsResponse> => {
+export const listSheets = async (timeoutMs: number = 10000): Promise<ListSheetsResponse> => {
   const token = getToken();
   const headers: Record<string, string> = {};
 
@@ -566,14 +583,65 @@ export const listSheets = async (): Promise<ListSheetsResponse> => {
     headers['Authorization'] = `Bearer ${token}`;
   }
 
+  // Create an AbortController for timeout
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    const response = await fetch(`${TURTLE_API_BASE_URL}/sheets/sheets`, {
+      method: 'GET',
+      headers,
+      signal: controller.signal,
+    });
+
+    clearTimeout(timeoutId);
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Failed to list sheets');
+    }
+
+    return await response.json();
+  } catch (error) {
+    clearTimeout(timeoutId);
+    if (error instanceof Error && error.name === 'AbortError') {
+      throw new Error(`Request timeout after ${timeoutMs}ms`);
+    }
+    throw error;
+  }
+};
+
+// Create a new sheet with headers
+export interface CreateSheetRequest {
+  sheet_name: string;
+}
+
+export interface CreateSheetResponse {
+  success: boolean;
+  message?: string;
+  sheets?: string[];
+  error?: string;
+}
+
+export const createSheet = async (data: CreateSheetRequest): Promise<CreateSheetResponse> => {
+  const token = getToken();
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+  };
+
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
+
   const response = await fetch(`${TURTLE_API_BASE_URL}/sheets/sheets`, {
-    method: 'GET',
+    method: 'POST',
     headers,
+    body: JSON.stringify(data),
   });
 
   if (!response.ok) {
     const error = await response.json();
-    throw new Error(error.error || 'Failed to list sheets');
+    throw new Error(error.error || 'Failed to create sheet');
   }
 
   return await response.json();

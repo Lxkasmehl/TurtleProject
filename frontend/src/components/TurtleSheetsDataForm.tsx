@@ -16,12 +16,13 @@ import {
   Paper,
   Title,
   Loader,
+  Modal,
 } from '@mantine/core';
 import { useState, useEffect } from 'react';
 import { IconInfoCircle, IconCheck, IconX } from '@tabler/icons-react';
 import { notifications } from '@mantine/notifications';
 import type { TurtleSheetsData } from '../services/api';
-import { listSheets } from '../services/api';
+import { listSheets, createSheet } from '../services/api';
 
 interface TurtleSheetsDataFormProps {
   initialData?: TurtleSheetsData;
@@ -50,6 +51,9 @@ export function TurtleSheetsDataForm({
   const [availableSheets, setAvailableSheets] = useState<string[]>([]);
   const [selectedSheetName, setSelectedSheetName] = useState<string>(initialSheetName || '');
   const [loadingSheets, setLoadingSheets] = useState(false);
+  const [showCreateSheetModal, setShowCreateSheetModal] = useState(false);
+  const [newSheetName, setNewSheetName] = useState('');
+  const [creatingSheet, setCreatingSheet] = useState(false);
 
   useEffect(() => {
     if (initialData) {
@@ -61,11 +65,21 @@ export function TurtleSheetsDataForm({
   }, [initialData, initialSheetName]);
 
   useEffect(() => {
-    // Load available sheets on mount
+    // Load available sheets on mount with timeout
+    let cancelled = false;
+    
     const loadSheets = async () => {
       setLoadingSheets(true);
+      
       try {
-        const response = await listSheets();
+        // listSheets() now has built-in timeout (10 seconds)
+        const response = await listSheets(10000);
+        
+        // Check if component was unmounted
+        if (cancelled) {
+          return;
+        }
+        
         if (response.success && response.sheets) {
           const sheets = response.sheets;
           setAvailableSheets(sheets);
@@ -78,19 +92,72 @@ export function TurtleSheetsDataForm({
           });
         }
       } catch (error) {
+        // Check if component was unmounted
+        if (cancelled) {
+          return;
+        }
+        
         console.error('Failed to load sheets:', error);
-        notifications.show({
-          title: 'Warning',
-          message: 'Failed to load available sheets',
-          color: 'yellow',
-        });
+        // Don't show error notification - just log it
+        // The form can still work without sheets list (user can type sheet name)
+        setAvailableSheets([]);
       } finally {
-        setLoadingSheets(false);
+        if (!cancelled) {
+          setLoadingSheets(false);
+        }
       }
     };
 
     loadSheets();
+    
+    // Cleanup: cancel if component unmounts
+    return () => {
+      cancelled = true;
+    };
   }, [initialSheetName]);
+
+  const handleCreateNewSheet = async (sheetName: string) => {
+    if (!sheetName || !sheetName.trim()) {
+      notifications.show({
+        title: 'Error',
+        message: 'Please enter a sheet name',
+        color: 'red',
+      });
+      return;
+    }
+
+    setCreatingSheet(true);
+    try {
+      const response = await createSheet({ sheet_name: sheetName.trim() });
+      if (response.success) {
+        // Reload sheets list
+        const sheetsResponse = await listSheets();
+        if (sheetsResponse.success && sheetsResponse.sheets) {
+          setAvailableSheets(sheetsResponse.sheets);
+        }
+        // Select the newly created sheet
+        setSelectedSheetName(sheetName.trim());
+        setShowCreateSheetModal(false);
+        setNewSheetName('');
+        notifications.show({
+          title: 'Success',
+          message: `Sheet "${sheetName}" created successfully`,
+          color: 'green',
+        });
+      } else {
+        throw new Error(response.error || 'Failed to create sheet');
+      }
+    } catch (error) {
+      console.error('Error creating sheet:', error);
+      notifications.show({
+        title: 'Error',
+        message: error instanceof Error ? error.message : 'Failed to create sheet',
+        color: 'red',
+      });
+    } finally {
+      setCreatingSheet(false);
+    }
+  };
 
   const handleChange = (field: keyof TurtleSheetsData, value: string) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
@@ -154,8 +221,32 @@ export function TurtleSheetsDataForm({
   };
 
   return (
-    <Paper shadow='sm' p='xl' radius='md' withBorder>
-      <Stack gap='lg'>
+    <Paper shadow='sm' p='xl' radius='md' withBorder style={{ position: 'relative' }}>
+      {loading && (
+        <div
+          style={{
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: 'rgba(255, 255, 255, 0.9)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 1000,
+            borderRadius: 'var(--mantine-radius-md)',
+          }}
+        >
+          <Stack align='center' gap='md'>
+            <Loader size='xl' />
+            <Text size='lg' fw={500}>
+              {mode === 'create' ? 'Creating' : 'Updating'} turtle data...
+            </Text>
+          </Stack>
+        </div>
+      )}
+      <Stack gap='lg' style={{ opacity: loading ? 0.3 : 1, pointerEvents: loading ? 'none' : 'auto' }}>
         <div>
           <Title order={3}>Turtle Data - Google Sheets</Title>
           <Text size='sm' c='dimmed' mt='xs'>
@@ -186,14 +277,22 @@ export function TurtleSheetsDataForm({
               </Group>
             ) : (
               <Select
-                label='Sheet / Location *'
-                placeholder='Select a sheet'
-                data={availableSheets}
+                label='Sheet / Location'
+                placeholder='Select a sheet or create new'
+                data={[...availableSheets, { value: '__create_new__', label: '+ Create New Sheet' }]}
                 value={selectedSheetName}
-                onChange={(value) => setSelectedSheetName(value || '')}
+                onChange={(value) => {
+                  if (value === '__create_new__') {
+                    setShowCreateSheetModal(true);
+                    setSelectedSheetName('');
+                  } else {
+                    setSelectedSheetName(value || '');
+                  }
+                }}
                 required
                 description='Select the Google Sheets tab where this turtle data should be stored'
                 error={!selectedSheetName ? 'Sheet selection is required' : undefined}
+                searchable
               />
             )}
           </Grid.Col>
@@ -422,15 +521,56 @@ export function TurtleSheetsDataForm({
 
         <Group justify='flex-end' gap='md' mt='md'>
           {onCancel && (
-            <Button variant='light' onClick={onCancel} disabled={loading}>
+            <Button variant='light' onClick={onCancel}>
               Cancel
             </Button>
           )}
-          <Button onClick={handleSubmit} loading={loading}>
+          <Button onClick={handleSubmit}>
             {mode === 'create' ? 'Create' : 'Update'} Turtle Data
           </Button>
         </Group>
       </Stack>
+
+      {/* Modal for creating new sheet */}
+      <Modal
+        opened={showCreateSheetModal}
+        onClose={() => {
+          setShowCreateSheetModal(false);
+          setNewSheetName('');
+        }}
+        title='Create New Sheet'
+      >
+        <Stack gap='md'>
+          <Text size='sm' c='dimmed'>
+            Create a new Google Sheets tab with all required headers.
+          </Text>
+          <TextInput
+            label='Sheet Name'
+            placeholder='Enter sheet name (e.g., Location A)'
+            value={newSheetName}
+            onChange={(e) => setNewSheetName(e.target.value)}
+            required
+          />
+          <Group justify='flex-end' gap='md'>
+            <Button
+              variant='subtle'
+              onClick={() => {
+                setShowCreateSheetModal(false);
+                setNewSheetName('');
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={() => handleCreateNewSheet(newSheetName)}
+              loading={creatingSheet}
+              disabled={!newSheetName.trim() || creatingSheet}
+            >
+              Create Sheet
+            </Button>
+          </Group>
+        </Stack>
+      </Modal>
     </Paper>
   );
 }

@@ -117,14 +117,25 @@ def get_sheets_service():
     if sheets_service is None:
         try:
             sheets_service = GoogleSheetsService()
-            # Check if migration is needed on first access
+            # Check if migration is needed on first access (but don't block on errors)
             if not migration_checked and not migration_running:
                 migration_checked = True
-                check_and_run_migration()
+                # Run migration check in background - don't wait for it
+                try:
+                    check_and_run_migration()
+                except Exception as migration_error:
+                    print(f"⚠️ Warning: Migration check failed (non-critical): {migration_error}")
         except Exception as e:
             print(f"⚠️ Warning: Google Sheets Service not available: {e}")
             print("   Google Sheets features will be disabled.")
+            # Don't raise - return None so endpoints can handle gracefully
     return sheets_service
+
+def reset_sheets_service():
+    """Reset the Google Sheets service (useful for connection issues)"""
+    global sheets_service
+    sheets_service = None
+    return get_sheets_service()
 
 def check_and_run_migration():
     """Check if migration is needed and run it in background if necessary"""
@@ -582,25 +593,55 @@ def approve_review(request_id):
                         if len(location_parts) >= 2:
                             state = location_parts[0]
                             location = location_parts[1]
+                        else:
+                            state = location_parts[0] if location_parts else ''
+                            location = ''
                             
-                            # Generate primary ID
-                            primary_id = service.generate_primary_id(state, location)
+                        # Check if frontend already created the entry (indicated by primary_id and sheet_name in sheets_data)
+                        # IMPORTANT: Only skip if primary_id is present - if createTurtleSheetsData failed,
+                        # primary_id won't be set, and we should create it in fallback mode
+                        if isinstance(sheets_data, dict) and sheets_data.get('primary_id') and sheets_data.get('sheet_name'):
+                            # Frontend already created the entry via createTurtleSheetsData
+                            # Skip creation here to avoid duplicates
+                            primary_id = sheets_data.get('primary_id')
+                            print(f"✅ Google Sheets entry already created by frontend for new turtle {new_turtle_id} with Primary ID {primary_id}")
+                            print(f"   Frontend data fields: {list(sheets_data.keys())}")
+                        elif isinstance(sheets_data, dict) and sheets_data.get('sheet_name') and not sheets_data.get('primary_id'):
+                            # Frontend tried to create but failed (no primary_id means createTurtleSheetsData failed)
+                            # Create it in fallback mode with all the form data
+                            print(f"⚠️ Frontend createTurtleSheetsData failed (no primary_id in sheets_data), creating in fallback mode")
+                        else:
+                            # Fallback: create Sheets entry if frontend didn't (for backwards compatibility)
                             
-                            # Create Sheets entry with basic data
-                            turtle_data = sheets_data or {}
+                            # Use primary_id from sheets_data if provided, otherwise generate new one
+                            if isinstance(sheets_data, dict) and sheets_data.get('primary_id'):
+                                primary_id = sheets_data.get('primary_id')
+                            else:
+                                primary_id = service.generate_primary_id(state, location)
+                            
+                            # Create Sheets entry with ALL data from sheets_data (preserve user input)
+                            turtle_data = sheets_data.copy() if isinstance(sheets_data, dict) else {}
+                            # Remove sheet_name from turtle_data (it's metadata, not data)
+                            turtle_data.pop('sheet_name', None)
+                            
                             # Set primary_id in the Primary ID column (globally unique)
                             turtle_data['primary_id'] = primary_id
-                            # Also set id for backwards compatibility
-                            turtle_data['id'] = primary_id
-                            turtle_data['general_location'] = state
-                            turtle_data['location'] = location
+                            # Keep user-provided 'id' if present, otherwise use primary_id as fallback
+                            if 'id' not in turtle_data or not turtle_data.get('id'):
+                                turtle_data['id'] = primary_id
+                            # Ensure location fields are set
+                            if 'general_location' not in turtle_data or not turtle_data.get('general_location'):
+                                turtle_data['general_location'] = state
+                            if 'location' not in turtle_data or not turtle_data.get('location'):
+                                turtle_data['location'] = location
                             
                             # Determine sheet_name from the turtle data or use a default
-                            # For now, we'll need to get sheet_name from the request or use a default
-                            # This should be passed from the frontend
                             sheet_name = sheets_data.get('sheet_name') if isinstance(sheets_data, dict) else 'Location A'
+                            
+                            # Debug: Log what data we're creating
+                            
                             service.create_turtle_data(turtle_data, sheet_name, state, location)
-                            print(f"✅ Created Google Sheets entry for new turtle {new_turtle_id} with Primary ID {primary_id}")
+                            print(f"✅ Created Google Sheets entry for new turtle {new_turtle_id} with Primary ID {primary_id} (fallback)")
                     elif match_turtle_id:
                         # Existing turtle - ensure Sheets entry exists
                         # Try to find location from turtle folder structure
@@ -800,24 +841,30 @@ def create_turtle_sheets_data():
         if not service:
             return jsonify({'error': 'Google Sheets service not configured'}), 503
         
-        # Always generate primary ID automatically (never use user-provided)
+        # Use primary_id from turtle_data if provided (frontend already generated it), otherwise generate new one
         # Primary ID is globally unique across all sheets
-        primary_id = service.generate_primary_id(state, location)
-        # Set both primary_id (for Primary ID column) and id (for ID column, if needed)
-        turtle_data['primary_id'] = primary_id
-        # Keep existing 'id' if present, otherwise use primary_id
-        if 'id' not in turtle_data:
+        if turtle_data.get('primary_id'):
+            primary_id = turtle_data['primary_id']
+        else:
+            primary_id = service.generate_primary_id(state, location)
+            turtle_data['primary_id'] = primary_id
+        
+        # Keep existing 'id' if present (user input), otherwise use primary_id as fallback
+        # This allows users to enter their own ID while still having a fallback
+        if 'id' not in turtle_data or not turtle_data.get('id'):
             turtle_data['id'] = primary_id
         
         created_id = service.create_turtle_data(turtle_data, sheet_name, state, location)
         
         if created_id:
+            print(f"✅ Successfully created turtle in sheets with Primary ID: {created_id}")
             return jsonify({
                 'success': True,
                 'primary_id': created_id,
                 'message': 'Turtle data created successfully'
             })
         else:
+            print(f"❌ Failed to create turtle in sheets - create_turtle_data returned None")
             return jsonify({'error': 'Failed to create turtle data'}), 500
     
     except Exception as e:
@@ -849,7 +896,6 @@ def update_turtle_sheets_data(primary_id):
             return jsonify({'error': 'sheet_name is required'}), 400
         
         # Debug: Log the sheet_name to verify it's correct
-        print(f"DEBUG: Using sheet_name='{sheet_name}', state='{state}', location='{location}'")
         
         service = get_sheets_service()
         if not service:
@@ -930,18 +976,71 @@ def update_turtle_sheets_data(primary_id):
         print(f"Traceback:\n{error_trace}")
         return jsonify({'error': f'Failed to update turtle data: {str(e)}'}), 500
 
-@app.route('/api/sheets/sheets', methods=['GET'])
+@app.route('/api/sheets/sheets', methods=['GET', 'POST'])
 @require_admin
 def list_sheets():
     """
     List all available sheets (tabs) in the Google Spreadsheet (Admin only)
+    POST: Create a new sheet with headers
+    GET: List all sheets
     """
     try:
         service = get_sheets_service()
         if not service:
-            return jsonify({'error': 'Google Sheets service not configured'}), 503
+            return jsonify({
+                'success': False,
+                'error': 'Google Sheets service not configured',
+                'sheets': []
+            }), 503
         
-        sheets = service.list_sheets()
+        if request.method == 'POST':
+            # Create new sheet
+            data = request.json or {}
+            sheet_name = data.get('sheet_name', '').strip()
+            
+            if not sheet_name:
+                return jsonify({
+                    'success': False,
+                    'error': 'sheet_name is required'
+                }), 400
+            
+            # Check if sheet already exists
+            existing_sheets = service.list_sheets()
+            if sheet_name in existing_sheets:
+                return jsonify({
+                    'success': True,
+                    'message': f'Sheet "{sheet_name}" already exists',
+                    'sheets': service.list_sheets()
+                })
+            
+            # Create new sheet with headers
+            if service.create_sheet_with_headers(sheet_name):
+                return jsonify({
+                    'success': True,
+                    'message': f'Sheet "{sheet_name}" created successfully',
+                    'sheets': service.list_sheets()
+                })
+            else:
+                return jsonify({
+                    'success': False,
+                    'error': f'Failed to create sheet "{sheet_name}"'
+                }), 500
+        
+        # GET: List sheets
+        try:
+            sheets = service.list_sheets()
+            if not isinstance(sheets, list):
+                sheets = []
+        except Exception as list_error:
+            print(f"Error calling list_sheets(): {list_error}")
+            import traceback
+            traceback.print_exc()
+            # Return empty list instead of failing completely
+            return jsonify({
+                'success': False,
+                'error': f'Failed to list sheets: {str(list_error)}',
+                'sheets': []
+            }), 500
         
         return jsonify({
             'success': True,
@@ -952,11 +1051,16 @@ def list_sheets():
         import traceback
         error_trace = traceback.format_exc()
         try:
-            print(f"❌ Error listing sheets: {str(e)}")
+            print(f"❌ Error in sheets endpoint: {str(e)}")
         except UnicodeEncodeError:
-            print(f"[ERROR] Error listing sheets: {str(e)}")
+            print(f"[ERROR] Error in sheets endpoint: {str(e)}")
         print(f"Traceback:\n{error_trace}")
-        return jsonify({'error': f'Failed to list sheets: {str(e)}'}), 500
+        # Return empty list instead of failing completely
+        return jsonify({
+            'success': False,
+            'error': f'Failed to process request: {str(e)}',
+            'sheets': []
+        }), 500
 
 @app.route('/api/sheets/turtles', methods=['GET', 'OPTIONS'])
 @require_admin
@@ -1109,16 +1213,6 @@ def migrate_ids_to_primary_ids():
             print(f"[ERROR] Error migrating IDs: {str(e)}")
         print(f"Traceback:\n{error_trace}")
         return jsonify({'error': f'Failed to migrate IDs: {str(e)}'}), 500
-    
-    except Exception as e:
-        import traceback
-        error_trace = traceback.format_exc()
-        try:
-            print(f"❌ Error listing turtles: {str(e)}")
-        except UnicodeEncodeError:
-            print(f"[ERROR] Error listing turtles: {str(e)}")
-        print(f"Traceback:\n{error_trace}")
-        return jsonify({'error': f'Failed to list turtles: {str(e)}'}), 500
 
 if __name__ == '__main__':
     # Determine if debug mode should be enabled

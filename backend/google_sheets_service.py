@@ -4,6 +4,7 @@ Handles all interactions with Google Sheets for turtle data management.
 """
 
 import os
+import ssl
 from typing import Dict, List, Optional, Any
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
@@ -697,7 +698,41 @@ class GoogleSheetsService:
         import random
         
         # Get all available sheets to check for uniqueness
-        all_sheets = self.list_sheets()
+        # Use a timeout to avoid blocking for too long (IDs are unique by timestamp anyway)
+        # If list_sheets fails or times out, use empty list (we'll still generate unique IDs)
+        all_sheets = []
+        try:
+            # Use threading to add a timeout to list_sheets()
+            import threading
+            sheets_result = [None]
+            exception_result = [None]
+            
+            def call_list_sheets():
+                try:
+                    sheets_result[0] = self.list_sheets()
+                except Exception as e:
+                    exception_result[0] = e
+            
+            thread = threading.Thread(target=call_list_sheets)
+            thread.daemon = True
+            thread.start()
+            thread.join(timeout=5.0)  # 5 second timeout
+            
+            if thread.is_alive():
+                # Timeout occurred - list_sheets is taking too long
+                print(f"Warning: list_sheets() timed out after 5 seconds for ID uniqueness check - continuing without check")
+                all_sheets = []  # Continue with empty list - IDs are still unique based on timestamp
+            elif exception_result[0]:
+                # Exception occurred
+                print(f"Warning: Could not list sheets for ID uniqueness check: {exception_result[0]}")
+                all_sheets = []  # Continue with empty list
+            else:
+                # Success
+                all_sheets = sheets_result[0] if isinstance(sheets_result[0], list) else []
+        except Exception as e:
+            print(f"Warning: Could not list sheets for ID uniqueness check: {e}")
+            all_sheets = []  # Continue with empty list - IDs are still unique based on timestamp
+        
         max_attempts = 100
         
         for attempt in range(max_attempts):
@@ -735,6 +770,9 @@ class GoogleSheetsService:
         """
         try:
             all_sheets = self.list_sheets()
+            if not all_sheets:
+                return False  # No sheets available, nothing to migrate
+            
             # Note: "Inital" is a typo in the actual sheet name
             backup_sheet_names = ['Backup (Initial State)', 'Backup (Inital State)', 'Backup']
             sheets_to_check = [s for s in all_sheets if s not in backup_sheet_names]
@@ -789,6 +827,8 @@ class GoogleSheetsService:
             
         except Exception as e:
             print(f"Error checking if migration is needed: {e}")
+            import traceback
+            traceback.print_exc()
             return False  # Assume no migration needed on error
     
     def migrate_ids_to_primary_ids(self) -> Dict[str, int]:
@@ -953,27 +993,189 @@ class GoogleSheetsService:
             col_idx //= 26
         return result
 
+    def _reinitialize_service(self):
+        """
+        Reinitialize the Google Sheets service (useful for SSL connection issues).
+        """
+        try:
+            credentials_file = os.environ.get('GOOGLE_SHEETS_CREDENTIALS_PATH')
+            if not credentials_file:
+                raise ValueError("Google Sheets credentials path not found")
+            
+            credentials = service_account.Credentials.from_service_account_file(
+                credentials_file,
+                scopes=['https://www.googleapis.com/auth/spreadsheets']
+            )
+            self.service = build('sheets', 'v4', credentials=credentials)
+            print("✅ Google Sheets service reinitialized")
+        except Exception as e:
+            print(f"⚠️ Failed to reinitialize Google Sheets service: {e}")
+            raise
+
     def list_sheets(self) -> List[str]:
         """
         List all available sheets (tabs) in the spreadsheet.
         Excludes "Backup (Initial State)" sheet as it's read-only backup.
+        Includes retry logic for SSL connection issues.
         
         Returns:
             List of sheet names (excluding backup sheets)
         """
+        max_retries = 2
+        for attempt in range(max_retries):
+            try:
+                if not hasattr(self, 'service') or self.service is None:
+                    print("Error: Google Sheets service not initialized")
+                    return []
+                
+                spreadsheet = self.service.spreadsheets().get(
+                    spreadsheetId=self.spreadsheet_id
+                ).execute()
+                
+                sheets = spreadsheet.get('sheets', [])
+                all_sheets = [sheet['properties']['title'] for sheet in sheets]
+                
+                # Exclude backup sheets (note: "Inital" is a typo in the actual sheet name)
+                backup_sheet_names = ['Backup (Initial State)', 'Backup (Inital State)', 'Backup']
+                filtered_sheets = [s for s in all_sheets if s not in backup_sheet_names]
+                
+                return filtered_sheets
+            except HttpError as e:
+                print(f"Error listing sheets (HttpError): {e}")
+                if attempt < max_retries - 1:
+                    print(f"Retrying... (attempt {attempt + 1}/{max_retries})")
+                    try:
+                        self._reinitialize_service()
+                        import time
+                        time.sleep(0.5)  # Brief delay before retry
+                        continue
+                    except:
+                        pass
+                import traceback
+                traceback.print_exc()
+                return []
+            except (ssl.SSLError, AttributeError) as e:
+                # SSL errors or connection issues - try reinitializing
+                error_msg = str(e)
+                if 'SSL' in error_msg or 'BIO' in error_msg or 'NoneType' in error_msg:
+                    print(f"SSL/Connection error listing sheets: {e}")
+                    if attempt < max_retries - 1:
+                        print(f"Reinitializing service and retrying... (attempt {attempt + 1}/{max_retries})")
+                        try:
+                            self._reinitialize_service()
+                            import time
+                            time.sleep(0.5)  # Brief delay before retry
+                            continue
+                        except Exception as reinit_error:
+                            print(f"Failed to reinitialize: {reinit_error}")
+                    else:
+                        # Only print traceback on final failure
+                        print(f"⚠️ Failed to list sheets after {max_retries} attempts")
+                        return []
+                else:
+                    raise
+            except Exception as e:
+                error_msg = str(e)
+                if 'SSL' in error_msg or 'BIO' in error_msg or 'NoneType' in error_msg or 'read' in error_msg:
+                    # Treat as SSL/connection error
+                    print(f"Connection error listing sheets: {e}")
+                    if attempt < max_retries - 1:
+                        print(f"Reinitializing service and retrying... (attempt {attempt + 1}/{max_retries})")
+                        try:
+                            self._reinitialize_service()
+                            import time
+                            time.sleep(0.5)  # Brief delay before retry
+                            continue
+                        except Exception as reinit_error:
+                            print(f"Failed to reinitialize: {reinit_error}")
+                    else:
+                        # Only print traceback on final failure
+                        print(f"⚠️ Failed to list sheets after {max_retries} attempts")
+                        return []
+                else:
+                    print(f"Error listing sheets (Exception): {e}")
+                    # Only print traceback for unexpected errors
+                    if attempt >= max_retries - 1:
+                        import traceback
+                        traceback.print_exc()
+                    return []
+        
+        # If we get here, all retries failed
+        return []
+
+    def create_sheet_with_headers(self, sheet_name: str) -> bool:
+        """
+        Create a new sheet (tab) with all required headers.
+        
+        Args:
+            sheet_name: Name of the new sheet to create
+            
+        Returns:
+            True if successful, False otherwise
+        """
+        # Skip backup sheets - they should not be created
+        backup_sheet_names = ['Backup (Initial State)', 'Backup (Inital State)', 'Backup']
+        if sheet_name in backup_sheet_names:
+            print(f"ERROR: Cannot create backup sheet '{sheet_name}'")
+            return False
+        
         try:
-            spreadsheet = self.service.spreadsheets().get(
-                spreadsheetId=self.spreadsheet_id
+            # Check if sheet already exists
+            existing_sheets = self.list_sheets()
+            if sheet_name in existing_sheets:
+                print(f"Sheet '{sheet_name}' already exists")
+                return True  # Sheet exists, that's fine
+            
+            # Get all column headers from COLUMN_MAPPING
+            headers = list(self.COLUMN_MAPPING.keys())
+            
+            # Create the new sheet
+            requests = [{
+                'addSheet': {
+                    'properties': {
+                        'title': sheet_name
+                    }
+                }
+            }]
+            
+            body = {'requests': requests}
+            response = self.service.spreadsheets().batchUpdate(
+                spreadsheetId=self.spreadsheet_id,
+                body=body
             ).execute()
             
-            sheets = spreadsheet.get('sheets', [])
-            all_sheets = [sheet['properties']['title'] for sheet in sheets]
+            # Get the new sheet ID
+            sheet_id = None
+            for reply in response.get('replies', []):
+                if 'addSheet' in reply:
+                    sheet_id = reply['addSheet']['properties']['sheetId']
+                    break
             
-            # Exclude backup sheets
-            backup_sheet_names = ['Backup (Initial State)', 'Backup']
-            filtered_sheets = [s for s in all_sheets if s not in backup_sheet_names]
+            if sheet_id is None:
+                print(f"ERROR: Could not get sheet ID for new sheet '{sheet_name}'")
+                return False
             
-            return filtered_sheets
+            # Write headers to row 1
+            escaped_sheet = self._escape_sheet_name(sheet_name)
+            range_name = f"{escaped_sheet}!1:1"
+            body = {
+                'values': [headers]
+            }
+            self.service.spreadsheets().values().update(
+                spreadsheetId=self.spreadsheet_id,
+                range=range_name,
+                valueInputOption='RAW',
+                body=body
+            ).execute()
+            
+            print(f"✅ Created new sheet '{sheet_name}' with {len(headers)} headers")
+            return True
+            
         except HttpError as e:
-            print(f"Error listing sheets: {e}")
-            return []
+            print(f"Error creating sheet '{sheet_name}': {e}")
+            return False
+        except Exception as e:
+            print(f"Error creating sheet '{sheet_name}': {e}")
+            import traceback
+            traceback.print_exc()
+            return False

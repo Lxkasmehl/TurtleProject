@@ -14,6 +14,7 @@ import {
   Card,
   Divider,
   ScrollArea,
+  Modal,
 } from '@mantine/core';
 import { IconPhoto, IconCheck, IconArrowLeft, IconPlus} from '@tabler/icons-react';
 import { useEffect, useState } from 'react';
@@ -24,6 +25,8 @@ import {
   getImageUrl,
   approveReview,
   updateTurtleSheetsData,
+  createTurtleSheetsData,
+  generatePrimaryId,
   type TurtleSheetsData,
 } from '../services/api';
 import { notifications } from '@mantine/notifications';
@@ -45,6 +48,10 @@ export default function AdminTurtleMatchPage() {
   const [processing, setProcessing] = useState(false);
   const [sheetsData, setSheetsData] = useState<TurtleSheetsData | null>(null);
   const [primaryId, setPrimaryId] = useState<string | null>(null);
+  const [showNewTurtleModal, setShowNewTurtleModal] = useState(false);
+  const [newTurtlePrimaryId, setNewTurtlePrimaryId] = useState<string | null>(null);
+  const [newTurtleSheetsData, setNewTurtleSheetsData] = useState<TurtleSheetsData | null>(null);
+  const [newTurtleSheetName, setNewTurtleSheetName] = useState('');
 
   useEffect(() => {
     if (role !== 'admin') {
@@ -154,13 +161,181 @@ export default function AdminTurtleMatchPage() {
   };
 
   const handleCreateNewTurtle = async () => {
-    // This will be handled in a new view/modal for creating new turtles
-    // For now, navigate or show a form
-    notifications.show({
-      title: 'Info',
-      message: 'New turtle creation will be implemented',
-      color: 'blue',
-    });
+    // Open modal for creating new turtle
+    setShowNewTurtleModal(true);
+    setNewTurtlePrimaryId(null);
+    setNewTurtleSheetsData(null);
+    setNewTurtleSheetName('');
+  };
+
+  const handleSaveNewTurtleSheetsData = async (data: TurtleSheetsData, sheetName: string) => {
+    // Save the sheets data to state (for UI display)
+    setNewTurtleSheetsData(data);
+    setNewTurtleSheetName(sheetName);
+    
+    // Extract state and location from form data
+    const state = data.general_location || '';
+    const location = data.location || '';
+    
+    // Generate primary ID if not already generated
+    let primaryId = newTurtlePrimaryId;
+    if (!primaryId) {
+      try {
+        const primaryIdResponse = await generatePrimaryId({
+          state,
+          location,
+        });
+        if (primaryIdResponse.success && primaryIdResponse.primary_id) {
+          primaryId = primaryIdResponse.primary_id;
+          setNewTurtlePrimaryId(primaryId);
+        }
+      } catch (error) {
+        console.error('Error generating primary ID:', error);
+      }
+    }
+    
+    // Automatically confirm and create the turtle after saving the form data
+    // Pass data and sheetName directly to avoid React state update timing issues
+    // This avoids having two buttons (one in form, one outside)
+    await handleConfirmNewTurtle(sheetName, data);
+  };
+
+  const handleConfirmNewTurtle = async (
+    sheetNameOverride?: string,
+    sheetsDataOverride?: TurtleSheetsData,
+  ) => {
+    // Use provided values or fall back to state
+    const effectiveSheetName = sheetNameOverride || newTurtleSheetName;
+    const effectiveSheetsData = sheetsDataOverride || newTurtleSheetsData;
+    
+    if (!effectiveSheetName) {
+      notifications.show({
+        title: 'Error',
+        message: 'Please select a sheet for the new turtle',
+        color: 'red',
+      });
+      return;
+    }
+
+    if (!imageId) {
+      notifications.show({
+        title: 'Error',
+        message: 'Missing image ID',
+        color: 'red',
+      });
+      return;
+    }
+
+    if (!matchData?.uploaded_image_path) {
+      notifications.show({
+        title: 'Error',
+        message: 'Missing image path',
+        color: 'red',
+      });
+      return;
+    }
+
+    setProcessing(true);
+    try {
+      // Extract state and location from form data
+      const formState = effectiveSheetsData?.general_location || '';
+      const formLocation = effectiveSheetsData?.location || '';
+      const finalLocation = formState && formLocation ? `${formState}/${formLocation}` : effectiveSheetName;
+
+      const locationParts = finalLocation.split('/');
+      const turtleState = locationParts[0] || '';
+      const turtleLocation = locationParts.slice(1).join('/') || '';
+
+      // Generate primary ID if not already generated
+      let finalPrimaryId = newTurtlePrimaryId;
+      if (!finalPrimaryId) {
+        try {
+          const primaryIdResponse = await generatePrimaryId({
+            state: turtleState,
+            location: turtleLocation,
+          });
+          if (primaryIdResponse.success && primaryIdResponse.primary_id) {
+            finalPrimaryId = primaryIdResponse.primary_id;
+            setNewTurtlePrimaryId(finalPrimaryId);
+          }
+        } catch (error) {
+          console.error('Error generating primary ID:', error);
+        }
+      }
+
+      // Create turtle in Google Sheets first (before approveReview)
+      // This ensures the data is created exactly as the user entered it
+      let sheetsDataCreated = false;
+      if (effectiveSheetsData && finalPrimaryId && effectiveSheetName) {
+        try {
+          const result = await createTurtleSheetsData({
+            sheet_name: effectiveSheetName,
+            state: turtleState,
+            location: turtleLocation,
+            turtle_data: {
+              ...effectiveSheetsData,
+              primary_id: finalPrimaryId,
+              general_location: turtleState,
+              location: turtleLocation,
+            },
+          });
+          if (result.success) {
+            sheetsDataCreated = true;
+          } else {
+            sheetsDataCreated = false;
+          }
+        } catch (sheetsError) {
+          console.error('Error creating turtle in sheets:', sheetsError);
+          // Show error to user but continue - backend will create it as fallback
+          notifications.show({
+            title: 'Warning',
+            message: 'Failed to create turtle in Google Sheets. Backend will create it as fallback.',
+            color: 'yellow',
+          });
+          sheetsDataCreated = false;
+        }
+      }
+
+      // Approve review with new turtle
+      // Note: We already created the Sheets entry above, so approveReview should skip creating it
+      // Use primary ID as turtle ID, or fallback to generated ID
+      const turtleIdForReview = finalPrimaryId || `T${Date.now()}`;
+      
+      await approveReview(imageId, {
+        new_location: finalLocation,
+        new_turtle_id: turtleIdForReview,
+        uploaded_image_path: matchData.uploaded_image_path,
+        sheets_data: effectiveSheetsData ? {
+          ...effectiveSheetsData,
+          sheet_name: effectiveSheetName, // Use the effective sheet name
+          // Only include primary_id if sheets data was successfully created by frontend
+          // Otherwise, let backend create it in fallback mode
+          primary_id: sheetsDataCreated ? (finalPrimaryId ?? undefined) as string | undefined : undefined,
+        } : undefined,
+      });
+
+      localStorage.removeItem(`match_${imageId}`);
+
+      notifications.show({
+        title: 'Success!',
+        message: 'New turtle created successfully',
+        color: 'green',
+        icon: <IconCheck size={18} />,
+      });
+
+      // Close the modal after successful creation
+      setShowNewTurtleModal(false);
+      
+      navigate('/');
+    } catch (error) {
+      notifications.show({
+        title: 'Error',
+        message: error instanceof Error ? error.message : 'Failed to create new turtle',
+        color: 'red',
+      });
+    } finally {
+      setProcessing(false);
+    }
   };
 
   if (role !== 'admin') {
@@ -364,18 +539,28 @@ export default function AdminTurtleMatchPage() {
 
                   {/* Action Buttons */}
                   <Paper shadow='sm' p='md' radius='md' withBorder>
-                    <Group justify='flex-end' gap='md'>
-                      <Button variant='light' onClick={() => navigate('/')} disabled={processing}>
-                        Cancel
-                      </Button>
+                    <Group justify='space-between' gap='md'>
                       <Button
-                        onClick={handleConfirmMatch}
-                        disabled={!selectedMatch || processing}
-                        loading={processing}
-                        leftSection={<IconCheck size={16} />}
+                        variant='subtle'
+                        leftSection={<IconPlus size={16} />}
+                        onClick={handleCreateNewTurtle}
+                        disabled={processing}
                       >
-                        Confirm Match
+                        Create New Turtle Instead
                       </Button>
+                      <Group gap='md'>
+                        <Button variant='light' onClick={() => navigate('/')} disabled={processing}>
+                          Cancel
+                        </Button>
+                        <Button
+                          onClick={handleConfirmMatch}
+                          disabled={!selectedMatch || processing}
+                          loading={processing}
+                          leftSection={<IconCheck size={16} />}
+                        >
+                          Confirm Match
+                        </Button>
+                      </Group>
                     </Group>
                   </Paper>
                 </Stack>
@@ -390,6 +575,16 @@ export default function AdminTurtleMatchPage() {
                       <Text size='sm' c='dimmed' ta='center'>
                         Click on any match from the list to see turtle data and Google Sheets information
                       </Text>
+                      <Text size='sm' c='dimmed' ta='center' mt='md'>
+                        Or create a new turtle entry if none of the matches are suitable
+                      </Text>
+                      <Button
+                        leftSection={<IconPlus size={16} />}
+                        onClick={handleCreateNewTurtle}
+                        variant='light'
+                      >
+                        Create New Turtle
+                      </Button>
                     </Stack>
                   </Center>
                 </Paper>
@@ -398,6 +593,42 @@ export default function AdminTurtleMatchPage() {
           </Grid>
         )}
       </Stack>
+
+      {/* New Turtle Creation Modal */}
+      <Modal
+        opened={showNewTurtleModal}
+        onClose={() => setShowNewTurtleModal(false)}
+        title="Create New Turtle"
+        size="xl"
+        centered
+      >
+        <Stack gap="md">
+          <Text size="sm" c="dimmed">
+            Create a new turtle entry for this uploaded image. Select a sheet and fill in the turtle data below.
+            Primary ID will be automatically generated. ID and ID2 can be entered manually if needed.
+          </Text>
+
+          {newTurtlePrimaryId && (
+            <Paper p="sm" withBorder>
+              <Text size="sm" c="dimmed">Primary ID</Text>
+              <Text fw={500}>{newTurtlePrimaryId}</Text>
+            </Paper>
+          )}
+
+          <Divider label="Google Sheets Data" labelPosition="center" />
+
+          <TurtleSheetsDataForm
+            initialData={newTurtleSheetsData || undefined}
+            sheetName={newTurtleSheetName}
+            state={newTurtleSheetsData?.general_location || ''}
+            location={newTurtleSheetsData?.location || ''}
+            primaryId={newTurtlePrimaryId || undefined}
+            mode="create"
+            onSave={handleSaveNewTurtleSheetsData}
+            onCancel={() => setShowNewTurtleModal(false)}
+          />
+        </Stack>
+      </Modal>
     </Container>
   );
 }
