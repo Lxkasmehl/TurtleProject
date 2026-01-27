@@ -137,80 +137,32 @@ class TurtleManager:
             return "error"
 
     # --- SEARCH ---
-    def search_for_matches(self, query_image_path):
-        MATCH_COUNT_THRESHOLD = 50
+    def search_for_matches(self, query_image_path, location_filter="All Locations"):
+        """
+        Deep Learning Search using Multi-Rotation Robust Matching.
+        """
         filename = os.path.basename(query_image_path)
-        print(f"🔍 Deep Searching {filename}...")
+        t_start = time.time()
 
-        # 1. Normal Search
-        results_normal = brain.match_query_against_db(query_image_path, self.db_index)
-        best_score_normal = results_normal[0]['score'] if results_normal else 0
+        print(f"🔍 Deep Searching {filename} (Robust Mode)...")
 
-        if best_score_normal >= MATCH_COUNT_THRESHOLD:
-            print(f"✅ Strong match ({best_score_normal}).")
-            return results_normal[:5]
+        # Filter Index
+        if location_filter and location_filter != "All Locations":
+            search_index = [entry for entry in self.db_index if entry[2] == location_filter]
+        else:
+            search_index = self.db_index
 
-        # 2. Mirror Search
-        print(f"⚠️ Low match ({best_score_normal}). Mirroring...")
-        img = cv.imread(query_image_path)
-        if img is None: return results_normal[:5]
+        # CALL THE ROBUST MATCHER (Handles 0, 90, 180, 270 rotations internally)
+        results = brain.match_query_robust(query_image_path, search_index)
 
-        img_mirrored = cv.flip(img, 1)
-        mirror_path = os.path.join(self.review_queue_dir, f"TEMP_MIRROR_{filename}")
-        cv.imwrite(mirror_path, img_mirrored)
-
-        try:
-            results_mirror = brain.match_query_against_db(mirror_path, self.db_index)
-            best_score_mirror = results_mirror[0]['score'] if results_mirror else 0
-
-            print(f"   Normal: {best_score_normal} | Mirrored: {best_score_mirror}")
-
-            if best_score_mirror > best_score_normal:
-                print("🪞 Mirrored View Winner.")
-                for res in results_mirror: res['is_mirrored'] = True
-                return results_mirror[:5]
-            else:
-                return results_normal[:5]
-        finally:
-            if os.path.exists(mirror_path): os.remove(mirror_path)
-
-    def create_review_packet(self, query_image_path, user_info=None):
-        request_id = f"Req_{int(time.time())}_{os.path.basename(query_image_path)}"
-        packet_dir = os.path.join(self.review_queue_dir, request_id)
-        candidates_dir = os.path.join(packet_dir, 'candidate_matches')
-
-        os.makedirs(packet_dir, exist_ok=True)
-        os.makedirs(candidates_dir, exist_ok=True)
-
-        filename = os.path.basename(query_image_path)
-        query_save_path = os.path.join(packet_dir, filename)
-        shutil.copy2(query_image_path, query_save_path)
-
-        if user_info:
-            with open(os.path.join(packet_dir, 'metadata.json'), 'w') as f:
-                json.dump(user_info, f)
-
-        results = self.search_for_matches(query_save_path)
+        t_elapsed = time.time() - t_start
 
         if results:
-            for i, match in enumerate(results):
-                pt_path = match.get('file_path')
-                score = match.get('score', 0)
-                match_id = match.get('site_id', 'Unknown')
+            print(f"✅ Found {len(results)} matches in {t_elapsed:.2f}s")
+        else:
+            print(f"⚠️ No matches found in {t_elapsed:.2f}s")
 
-                # Find matching JPG
-                base_path = os.path.splitext(pt_path)[0]
-                found_img = None
-                for ext in ['.jpg', '.jpeg', '.png']:
-                    if os.path.exists(base_path + ext):
-                        found_img = base_path + ext
-                        break
-
-                if found_img:
-                    new_name = f"Rank{i + 1}_ID{match_id}_Score{score}.jpg"
-                    shutil.copy2(found_img, os.path.join(candidates_dir, new_name))
-
-        return request_id
+        return results[:5], t_elapsed
 
     def get_review_queue(self):
         queue_items = []
