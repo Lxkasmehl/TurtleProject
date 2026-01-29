@@ -393,6 +393,7 @@ export interface TurtleSheetsData {
   name?: string;
   sex?: string;
   ibutton_last_set?: string;
+  last_assay_date?: string;
   dates_refound?: string;
   general_location?: string;
   location?: string;

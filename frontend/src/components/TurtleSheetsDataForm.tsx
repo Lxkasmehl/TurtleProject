@@ -462,8 +462,8 @@ export const TurtleSheetsDataForm = forwardRef<TurtleSheetsDataFormRef, TurtleSh
             />
           </Grid.Col>
 
-          {/* Row 7: More Checkboxes */}
-          <Grid.Col span={{ base: 12, md: 4 }}>
+          {/* Row 7: More Checkboxes + Last Assay Date */}
+          <Grid.Col span={{ base: 12, md: 3 }}>
             <Select
               label='DNA Extracted?'
               placeholder='Yes/No'
@@ -472,7 +472,7 @@ export const TurtleSheetsDataForm = forwardRef<TurtleSheetsDataFormRef, TurtleSh
               onChange={(value) => handleChange('dna_extracted', value || '')}
             />
           </Grid.Col>
-          <Grid.Col span={{ base: 12, md: 4 }}>
+          <Grid.Col span={{ base: 12, md: 3 }}>
             <TextInput
               label='iButton Last Set'
               placeholder='Date'
@@ -480,7 +480,16 @@ export const TurtleSheetsDataForm = forwardRef<TurtleSheetsDataFormRef, TurtleSh
               onChange={(e) => handleChange('ibutton_last_set', e.target.value)}
             />
           </Grid.Col>
-          <Grid.Col span={{ base: 12, md: 4 }}>
+          <Grid.Col span={{ base: 12, md: 3 }}>
+            <TextInput
+              label='Last Assay Date'
+              placeholder='YYYY-MM-DD'
+              value={formData.last_assay_date || ''}
+              onChange={(e) => handleChange('last_assay_date', e.target.value)}
+              description='Date last brought in for assays'
+            />
+          </Grid.Col>
+          <Grid.Col span={{ base: 12, md: 3 }}>
             <TextInput
               label='Transmitter Lifespan'
               placeholder='Lifespan'

@@ -18,6 +18,7 @@ COLUMN_MAPPING = {
     'Name': 'name',
     'Sex': 'sex',
     'iButton Last set': 'ibutton_last_set',
+    'Last Assay Date': 'last_assay_date',
     'Dates refound': 'dates_refound',
     'General Location': 'general_location',
     'Location': 'location',
