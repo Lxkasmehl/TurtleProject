@@ -40,7 +40,7 @@ interface MatchData {
 }
 
 export default function AdminTurtleMatchPage() {
-  const { role } = useUser();
+  const { role, authChecked } = useUser();
   const navigate = useNavigate();
   const { imageId } = useParams<{ imageId: string }>();
   const [matchData, setMatchData] = useState<MatchData | null>(null);
@@ -57,6 +57,7 @@ export default function AdminTurtleMatchPage() {
   const formRef = useRef<TurtleSheetsDataFormRef>(null);
 
   useEffect(() => {
+    if (!authChecked) return;
     if (role !== 'admin') {
       navigate('/');
       return;
@@ -80,7 +81,7 @@ export default function AdminTurtleMatchPage() {
     };
 
     loadMatchData();
-  }, [imageId, role, navigate]);
+  }, [imageId, authChecked, role, navigate]);
 
   const handleSelectMatch = async (turtleId: string) => {
     setSelectedMatch(turtleId);
@@ -397,6 +398,13 @@ export default function AdminTurtleMatchPage() {
     }
   };
 
+  if (!authChecked) {
+    return (
+      <Center py='xl'>
+        <Loader size='lg' />
+      </Center>
+    );
+  }
   if (role !== 'admin') {
     return null;
   }

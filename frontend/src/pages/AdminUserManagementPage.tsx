@@ -9,8 +9,9 @@ import {
   Alert,
   Group,
   Loader,
+  Center,
 } from '@mantine/core';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { IconMail, IconShield, IconAlertCircle, IconCheck } from '@tabler/icons-react';
 import { useUser } from '../hooks/useUser';
 import { useNavigate } from 'react-router-dom';
@@ -18,15 +19,27 @@ import { promoteToAdmin } from '../services/api';
 import { notifications } from '@mantine/notifications';
 
 export default function AdminUserManagementPage() {
-  const { role } = useUser();
+  const { role, authChecked } = useUser();
   const navigate = useNavigate();
   const [email, setEmail] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Redirect if not admin
+  useEffect(() => {
+    if (!authChecked) return;
+    if (role !== 'admin') {
+      navigate('/');
+    }
+  }, [authChecked, role, navigate]);
+
+  if (!authChecked) {
+    return (
+      <Center py="xl">
+        <Loader size="lg" />
+      </Center>
+    );
+  }
   if (role !== 'admin') {
-    navigate('/');
     return null;
   }
 

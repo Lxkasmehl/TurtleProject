@@ -52,7 +52,7 @@ import { TurtleSheetsDataForm, type TurtleSheetsDataFormRef } from '../component
 import { MapDisplay } from '../components/MapDisplay';
 
 export default function AdminTurtleRecordsPage() {
-  const { role } = useUser();
+  const { role, authChecked } = useUser();
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<string>('queue');
   
@@ -90,6 +90,7 @@ export default function AdminTurtleRecordsPage() {
   const [sheetsListLoading, setSheetsListLoading] = useState(false);
 
   useEffect(() => {
+    if (!authChecked) return;
     if (role !== 'admin') {
       navigate('/');
       return;
@@ -104,7 +105,7 @@ export default function AdminTurtleRecordsPage() {
       loadAllTurtles(selectedSheetFilter || undefined);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- only run when tab changes; filter changes trigger load from Select onChange
-  }, [role, navigate, activeTab]);
+  }, [authChecked, role, navigate, activeTab]);
 
   const loadQueue = async () => {
     setQueueLoading(true);
@@ -522,6 +523,17 @@ export default function AdminTurtleRecordsPage() {
       turtle.general_location?.toLowerCase().includes(query)
     );
   });
+
+  if (!authChecked) {
+    return (
+      <Center py='xl'>
+        <Loader size='lg' />
+      </Center>
+    );
+  }
+  if (role !== 'admin') {
+    return null;
+  }
 
   const state = selectedItem?.metadata.state || '';
   const location = selectedItem?.metadata.location || '';
