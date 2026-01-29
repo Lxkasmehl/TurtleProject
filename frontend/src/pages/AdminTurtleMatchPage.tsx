@@ -17,7 +17,7 @@ import {
   Modal,
 } from '@mantine/core';
 import { IconPhoto, IconCheck, IconArrowLeft, IconPlus} from '@tabler/icons-react';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useUser } from '../hooks/useUser';
 import {
@@ -27,10 +27,11 @@ import {
   updateTurtleSheetsData,
   createTurtleSheetsData,
   generatePrimaryId,
+  getTurtleSheetsData,
   type TurtleSheetsData,
 } from '../services/api';
 import { notifications } from '@mantine/notifications';
-import { TurtleSheetsDataForm } from '../components/TurtleSheetsDataForm';
+import { TurtleSheetsDataForm, type TurtleSheetsDataFormRef } from '../components/TurtleSheetsDataForm';
 
 interface MatchData {
   request_id: string;
@@ -52,6 +53,8 @@ export default function AdminTurtleMatchPage() {
   const [newTurtlePrimaryId, setNewTurtlePrimaryId] = useState<string | null>(null);
   const [newTurtleSheetsData, setNewTurtleSheetsData] = useState<TurtleSheetsData | null>(null);
   const [newTurtleSheetName, setNewTurtleSheetName] = useState('');
+  const [loadingTurtleData, setLoadingTurtleData] = useState(false);
+  const formRef = useRef<TurtleSheetsDataFormRef>(null);
 
   useEffect(() => {
     if (role !== 'admin') {
@@ -81,11 +84,69 @@ export default function AdminTurtleMatchPage() {
 
   const handleSelectMatch = async (turtleId: string) => {
     setSelectedMatch(turtleId);
-    // Initialize with turtle ID - user will select sheet and fill in data
-    setSheetsData({
-      id: turtleId,
-    });
-    setPrimaryId(turtleId);
+    setLoadingTurtleData(true);
+    
+    // Get match data to extract location for sheet name
+    const match = matchData?.matches.find((m) => m.turtle_id === turtleId);
+    const matchLocation = match?.location || '';
+    const locationParts = matchLocation.split('/');
+    const matchState = locationParts[0] || '';
+    const matchLocationSpecific = locationParts.slice(1).join('/') || '';
+    
+    try {
+      // First try without sheet name (backend will auto-find)
+      let response = await getTurtleSheetsData(turtleId);
+      
+      // If auto-find failed and we have a match location, try with sheet name
+      if (!response.exists && matchState && (!response.data || Object.keys(response.data).length <= 3)) {
+        try {
+          response = await getTurtleSheetsData(turtleId, matchState, matchState, matchLocationSpecific);
+        } catch {
+          // Ignore, use first response
+        }
+      }
+      
+      if (response.success && response.data) {
+        const hasRealData = response.exists || (
+          response.data.name ||
+          response.data.species ||
+          response.data.sex ||
+          response.data.transmitter_id ||
+          response.data.sheet_name ||
+          response.data.date_1st_found ||
+          response.data.notes ||
+          Object.keys(response.data).length > 3
+        );
+        
+        if (hasRealData) {
+          setSheetsData(response.data);
+          setPrimaryId(response.data.primary_id || turtleId);
+        } else {
+          setPrimaryId(turtleId);
+          setSheetsData({
+            id: turtleId,
+            general_location: matchState || '',
+            location: matchLocationSpecific || '',
+          });
+        }
+      } else {
+        setPrimaryId(turtleId);
+        setSheetsData({
+          id: turtleId,
+          general_location: matchState || '',
+          location: matchLocationSpecific || '',
+        });
+      }
+    } catch {
+      setPrimaryId(turtleId);
+      setSheetsData({
+        id: turtleId,
+        general_location: matchState || '',
+        location: matchLocationSpecific || '',
+      });
+    } finally {
+      setLoadingTurtleData(false);
+    }
   };
 
   const handleSaveSheetsData = async (data: TurtleSheetsData, sheetName: string) => {
@@ -113,27 +174,22 @@ export default function AdminTurtleMatchPage() {
     setSheetsData(data);
   };
 
-  const handleConfirmMatch = async () => {
+  // Combined handler: save to sheets AND confirm match
+  const handleSaveAndConfirm = async (data: TurtleSheetsData, sheetName: string) => {
     if (!selectedMatch || !imageId) {
-      notifications.show({
-        title: 'Error',
-        message: 'Please select a match first',
-        color: 'red',
-      });
-      return;
+      throw new Error('Please select a match first');
     }
 
     if (!matchData?.uploaded_image_path) {
-      notifications.show({
-        title: 'Error',
-        message: 'Missing image path',
-        color: 'red',
-      });
-      return;
+      throw new Error('Missing image path');
     }
 
     setProcessing(true);
     try {
+      // First, save to Google Sheets
+      await handleSaveSheetsData(data, sheetName);
+
+      // Then, confirm the match
       await approveReview(imageId, {
         match_turtle_id: selectedMatch,
         uploaded_image_path: matchData.uploaded_image_path,
@@ -143,7 +199,7 @@ export default function AdminTurtleMatchPage() {
 
       notifications.show({
         title: 'Success!',
-        message: 'Match confirmed successfully',
+        message: 'Turtle data saved and match confirmed successfully',
         color: 'green',
         icon: <IconCheck size={18} />,
       });
@@ -152,11 +208,19 @@ export default function AdminTurtleMatchPage() {
     } catch (error) {
       notifications.show({
         title: 'Error',
-        message: error instanceof Error ? error.message : 'Failed to confirm match',
+        message: error instanceof Error ? error.message : 'Failed to save and confirm',
         color: 'red',
       });
+      throw error; // Re-throw so form can handle it
     } finally {
       setProcessing(false);
+    }
+  };
+
+  // Handler for the combined button that triggers form submit
+  const handleCombinedButtonClick = async () => {
+    if (formRef.current) {
+      await formRef.current.submit();
     }
   };
 
@@ -486,7 +550,32 @@ export default function AdminTurtleMatchPage() {
             {/* Right Column: Selected Match Details & Sheets Data */}
             <Grid.Col span={{ base: 12, md: 7 }}>
               {selectedMatch && selectedMatchData ? (
-                <Stack gap='md'>
+                <Stack gap='md' style={{ position: 'relative' }}>
+                  {/* Loading overlay while turtle data is being fetched */}
+                  {loadingTurtleData && (
+                    <div
+                      style={{
+                        position: 'absolute',
+                        top: 0,
+                        left: 0,
+                        right: 0,
+                        bottom: 0,
+                        backgroundColor: 'rgba(255, 255, 255, 0.95)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        zIndex: 1000,
+                        borderRadius: 'var(--mantine-radius-md)',
+                      }}
+                    >
+                      <Stack align='center' gap='md'>
+                        <Loader size='xl' />
+                        <Text size='lg' fw={500}>
+                          Loading turtle data…
+                        </Text>
+                      </Stack>
+                    </div>
+                  )}
                   {/* Selected Match Info */}
                   <Paper shadow='sm' p='md' radius='md' withBorder>
                     <Stack gap='sm'>
@@ -526,6 +615,7 @@ export default function AdminTurtleMatchPage() {
                   <Paper shadow='sm' p='md' radius='md' withBorder>
                     <ScrollArea h={600}>
                       <TurtleSheetsDataForm
+                        ref={formRef}
                         initialData={sheetsData || undefined}
                         sheetName={sheetsData?.sheet_name}
                         state={state}
@@ -533,6 +623,8 @@ export default function AdminTurtleMatchPage() {
                         primaryId={primaryId || undefined}
                         mode={sheetsData ? 'edit' : 'create'}
                         onSave={handleSaveSheetsData}
+                        hideSubmitButton={true}
+                        onCombinedSubmit={handleSaveAndConfirm}
                       />
                     </ScrollArea>
                   </Paper>
@@ -553,12 +645,12 @@ export default function AdminTurtleMatchPage() {
                           Cancel
                         </Button>
                         <Button
-                          onClick={handleConfirmMatch}
+                          onClick={handleCombinedButtonClick}
                           disabled={!selectedMatch || processing}
                           loading={processing}
                           leftSection={<IconCheck size={16} />}
                         >
-                          Confirm Match
+                          Save to Sheets & Confirm Match
                         </Button>
                       </Group>
                     </Group>

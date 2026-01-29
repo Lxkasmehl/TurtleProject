@@ -439,9 +439,10 @@ export interface UpdateTurtleSheetsDataResponse {
 }
 
 // Get turtle data from Google Sheets
+// sheetName is optional - if not provided, the backend will automatically find the sheet containing the turtle
 export const getTurtleSheetsData = async (
   primaryId: string,
-  sheetName: string,
+  sheetName?: string,
   state?: string,
   location?: string
 ): Promise<GetTurtleSheetsDataResponse> => {
@@ -452,7 +453,10 @@ export const getTurtleSheetsData = async (
     headers['Authorization'] = `Bearer ${token}`;
   }
 
-  const params = new URLSearchParams({ sheet_name: sheetName });
+  const params = new URLSearchParams();
+  if (sheetName) {
+    params.append('sheet_name', sheetName);
+  }
   if (state) {
     params.append('state', state);
   }
@@ -461,7 +465,7 @@ export const getTurtleSheetsData = async (
   }
 
   const response = await fetch(
-    `${TURTLE_API_BASE_URL}/sheets/turtle/${primaryId}?${params.toString()}`,
+    `${TURTLE_API_BASE_URL}/sheets/turtle/${primaryId}${params.toString() ? `?${params.toString()}` : ''}`,
     {
       method: 'GET',
       headers,

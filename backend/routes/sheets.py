@@ -16,6 +16,7 @@ def register_sheets_routes(app):
     def get_turtle_sheets_data(primary_id):
         """
         Get turtle data from Google Sheets by primary ID (Admin only)
+        If sheet_name is not provided, automatically finds the sheet containing the turtle.
         If turtle doesn't exist, returns empty data structure (for new turtles)
         """
         try:
@@ -23,14 +24,57 @@ def register_sheets_routes(app):
             state = request.args.get('state', '')
             location = request.args.get('location', '')
             
-            if not sheet_name:
-                return jsonify({'error': 'sheet_name parameter is required'}), 400
-            
             service = get_sheets_service()
             if not service:
                 return jsonify({'error': 'Google Sheets service not configured'}), 503
             
-            turtle_data = service.get_turtle_data(primary_id, sheet_name, state, location)
+            # If sheet_name is not provided, try to find it automatically
+            if not sheet_name or not sheet_name.strip():
+                try:
+                    sheet_name = service.find_turtle_sheet(primary_id)
+                except Exception as find_error:
+                    print(f"Error finding turtle sheet for {primary_id}: {find_error}")
+                    sheet_name = None
+                
+                if not sheet_name:
+                    # Turtle doesn't exist in any sheet - return empty structure for new turtle
+                    return jsonify({
+                        'success': True,
+                        'data': {
+                            'id': primary_id,  # Use the provided primary_id
+                            'general_location': state or '',
+                            'location': location or '',
+                        },
+                        'exists': False
+                    })
+            
+            # Ensure sheet_name is not empty before calling get_turtle_data
+            if not sheet_name or not sheet_name.strip():
+                return jsonify({
+                    'success': True,
+                    'data': {
+                        'id': primary_id,
+                        'general_location': state or '',
+                        'location': location or '',
+                    },
+                    'exists': False
+                })
+            
+            # Try to get turtle data, but handle errors gracefully
+            try:
+                turtle_data = service.get_turtle_data(primary_id, sheet_name, state, location)
+            except Exception as get_error:
+                print(f"Error getting turtle data for {primary_id} from sheet {sheet_name}: {get_error}")
+                # If we can't get the data (e.g., SSL error), return empty structure
+                return jsonify({
+                    'success': True,
+                    'data': {
+                        'id': primary_id,
+                        'general_location': state or '',
+                        'location': location or '',
+                    },
+                    'exists': False
+                })
             
             if turtle_data:
                 return jsonify({
@@ -50,6 +94,15 @@ def register_sheets_routes(app):
                     'exists': False
                 })
         
+        except ValueError as e:
+            # Handle validation errors (e.g., empty sheet_name)
+            error_trace = traceback.format_exc()
+            try:
+                print(f"❌ Validation error getting turtle data from sheets: {str(e)}")
+            except UnicodeEncodeError:
+                print(f"[ERROR] Validation error getting turtle data from sheets: {str(e)}")
+            print(f"Traceback:\n{error_trace}")
+            return jsonify({'error': f'Validation error: {str(e)}'}), 400
         except Exception as e:
             error_trace = traceback.format_exc()
             try:

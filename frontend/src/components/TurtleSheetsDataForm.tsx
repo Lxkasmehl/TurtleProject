@@ -18,7 +18,7 @@ import {
   Loader,
   Modal,
 } from '@mantine/core';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useImperativeHandle, forwardRef } from 'react';
 import { IconInfoCircle, IconCheck, IconX } from '@tabler/icons-react';
 import { notifications } from '@mantine/notifications';
 import type { TurtleSheetsData } from '../services/api';
@@ -33,9 +33,15 @@ interface TurtleSheetsDataFormProps {
   onSave: (data: TurtleSheetsData, sheetName: string) => Promise<void>;
   onCancel?: () => void;
   mode: 'create' | 'edit';
+  hideSubmitButton?: boolean; // Hide the form's submit button
+  onCombinedSubmit?: (data: TurtleSheetsData, sheetName: string) => Promise<void>; // Combined action handler
 }
 
-export function TurtleSheetsDataForm({
+export interface TurtleSheetsDataFormRef {
+  submit: () => Promise<void>;
+}
+
+export const TurtleSheetsDataForm = forwardRef<TurtleSheetsDataFormRef, TurtleSheetsDataFormProps>(({
   initialData,
   sheetName: initialSheetName,
   state,
@@ -44,7 +50,9 @@ export function TurtleSheetsDataForm({
   onSave,
   onCancel,
   mode,
-}: TurtleSheetsDataFormProps) {
+  hideSubmitButton = false,
+  onCombinedSubmit,
+}, ref) => {
   const [formData, setFormData] = useState<TurtleSheetsData>(initialData || {});
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -201,13 +209,18 @@ export function TurtleSheetsDataForm({
 
     setLoading(true);
     try {
-      await onSave(formData, selectedSheetName);
-      notifications.show({
-        title: 'Success!',
-        message: `Turtle data ${mode === 'create' ? 'created' : 'updated'} successfully`,
-        color: 'green',
-        icon: <IconCheck size={18} />,
-      });
+      // Use combined submit handler if provided, otherwise use normal onSave
+      if (onCombinedSubmit) {
+        await onCombinedSubmit(formData, selectedSheetName);
+      } else {
+        await onSave(formData, selectedSheetName);
+        notifications.show({
+          title: 'Success!',
+          message: `Turtle data ${mode === 'create' ? 'created' : 'updated'} successfully`,
+          color: 'green',
+          icon: <IconCheck size={18} />,
+        });
+      }
     } catch (error) {
       notifications.show({
         title: 'Error',
@@ -219,6 +232,11 @@ export function TurtleSheetsDataForm({
       setLoading(false);
     }
   };
+
+  // Expose submit method via ref
+  useImperativeHandle(ref, () => ({
+    submit: handleSubmit,
+  }));
 
   return (
     <Paper shadow='sm' p='xl' radius='md' withBorder style={{ position: 'relative' }}>
@@ -519,16 +537,18 @@ export function TurtleSheetsDataForm({
           </Grid.Col>
         </Grid>
 
-        <Group justify='flex-end' gap='md' mt='md'>
-          {onCancel && (
-            <Button variant='light' onClick={onCancel}>
-              Cancel
+        {!hideSubmitButton && (
+          <Group justify='flex-end' gap='md' mt='md'>
+            {onCancel && (
+              <Button variant='light' onClick={onCancel}>
+                Cancel
+              </Button>
+            )}
+            <Button onClick={handleSubmit} loading={loading}>
+              {mode === 'create' ? 'Create' : 'Update'} Turtle Data
             </Button>
-          )}
-          <Button onClick={handleSubmit}>
-            {mode === 'create' ? 'Create' : 'Update'} Turtle Data
-          </Button>
-        </Group>
+          </Group>
+        )}
       </Stack>
 
       {/* Modal for creating new sheet */}
@@ -573,4 +593,4 @@ export function TurtleSheetsDataForm({
       </Modal>
     </Paper>
   );
-}
+});
