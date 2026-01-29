@@ -12,6 +12,8 @@ type UploadState = 'idle' | 'uploading' | 'success' | 'error';
 interface UsePhotoUploadOptions {
   role?: string;
   onSuccess?: (imageId: string) => void;
+  /** Admin only: sheet name (location) to test against; '' = all locations */
+  matchSheet?: string;
 }
 
 interface UsePhotoUploadReturn {
@@ -37,6 +39,7 @@ interface UsePhotoUploadReturn {
 export function usePhotoUpload({
   role,
   onSuccess,
+  matchSheet,
 }: UsePhotoUploadOptions = {}): UsePhotoUploadReturn {
   const navigate = useNavigate();
   const { user } = useUser();
@@ -136,7 +139,8 @@ export function usePhotoUpload({
         userRole,
         userEmail,
         undefined,
-        locationHint ?? undefined
+        locationHint ?? undefined,
+        userRole === 'admin' ? (matchSheet ?? '') : undefined
       );
 
       // Clear interval and set to 100%

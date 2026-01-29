@@ -99,8 +99,10 @@ def register_upload_routes(app):
                 return jsonify({'error': 'Failed to save file'}), 500
             
             if user_role == 'admin':
-                # Admin: Process immediately and return matches
-                matches = manager.search_for_matches(temp_path)
+                # Admin: Process immediately; optionally restrict to one location (sheet/datasheet)
+                # match_sheet: sheet name from Google Sheets (e.g. "Location A"); empty = test against all
+                match_sheet = (request.form.get('match_sheet') or '').strip() or None
+                matches = manager.search_for_matches(temp_path, sheet_name=match_sheet)
                 
                 # Format matches for frontend
                 formatted_matches = []

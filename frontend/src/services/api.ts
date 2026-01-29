@@ -270,7 +270,9 @@ export const uploadTurtlePhoto = async (
   _email: string, // Used by frontend, not sent to backend
   location?: { state: string; location: string },
   /** Optional: coordinates as hint only (never stored in sheets) */
-  locationHint?: LocationHint
+  locationHint?: LocationHint,
+  /** Admin only: sheet name (location) to test against; '' or undefined = test against all locations */
+  matchSheet?: string
 ): Promise<UploadPhotoResponse> => {
   const formData = new FormData();
   formData.append('file', file);
@@ -280,6 +282,10 @@ export const uploadTurtlePhoto = async (
   if (location) {
     formData.append('state', location.state);
     formData.append('location', location.location);
+  }
+  // Admin: which location/datasheet to match against (empty = all)
+  if (matchSheet !== undefined) {
+    formData.append('match_sheet', matchSheet);
   }
   if (locationHint) {
     formData.append('location_hint_lat', String(locationHint.latitude));

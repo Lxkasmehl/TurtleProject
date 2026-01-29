@@ -312,23 +312,30 @@ class TurtleManager:
 
     # --- NEW: SEARCH & OBSERVATION LOGIC ---
 
-    def search_for_matches(self, query_image_path):
+    def search_for_matches(self, query_image_path, sheet_name=None):
         """
         Smart Search with "Auto-Mirror" fallback.
         1. Search Normal.
         2. If scores are low, flip image horizontal and search again.
         3. Return the best set of results.
+
+        sheet_name: If set, only compare against turtles from this location (Google Sheet tab name).
+                    None or empty = search across all locations.
         """
         total_search_start = time.time()
+        location_filter = (sheet_name or '').strip() or None
 
         MATCH_CONFIDENCE_THRESHOLD = 15
 
         filename = os.path.basename(query_image_path)
-        print(f"🔍 Analyzing {filename} (Normal Orientation)...")
+        scope = f" (Location: {location_filter})" if location_filter else " (all locations)"
+        print(f"🔍 Analyzing {filename} (Normal Orientation){scope}...")
 
         # 1. First Pass (Normal)
-        # Use existing smart_search
-        candidates_normal = image_processing.smart_search(query_image_path, k_results=20)
+        # Use existing smart_search; optionally restrict to one location
+        candidates_normal = image_processing.smart_search(
+            query_image_path, location_filter=location_filter, k_results=20
+        )
         results_normal = []
 
         # Rerank with RANSAC
@@ -360,7 +367,9 @@ class TurtleManager:
         cv.imwrite(mirror_path, img_mirrored)
 
         try:
-            candidates_mirror = image_processing.smart_search(mirror_path, k_results=20)
+            candidates_mirror = image_processing.smart_search(
+                mirror_path, location_filter=location_filter, k_results=20
+            )
             results_mirror = []
             if candidates_mirror:
                 results_mirror = image_processing.rerank_results_with_spatial_verification(mirror_path, candidates_mirror)
