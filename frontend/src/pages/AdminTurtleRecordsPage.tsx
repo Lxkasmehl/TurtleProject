@@ -9,7 +9,6 @@ import {
   Paper,
   Center,
   Loader,
-  Alert,
   Button,
   Card,
   Image,
@@ -17,20 +16,24 @@ import {
   ScrollArea,
   Tabs,
   TextInput,
+  Flex,
+  Modal,
 } from '@mantine/core';
 import {
   IconPhoto,
-  IconInfoCircle,
   IconCheck,
   IconDatabase,
   IconSearch,
+  IconList,
+  IconTrash,
 } from '@tabler/icons-react';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useUser } from '../hooks/useUser';
 import { useNavigate } from 'react-router-dom';
 import {
   getReviewQueue,
   approveReview,
+  deleteReviewItem,
   getImageUrl,
   getTurtleSheetsData,
   type ReviewQueueItem,
@@ -39,7 +42,7 @@ import {
   type TurtleSheetsData,
 } from '../services/api';
 import { notifications } from '@mantine/notifications';
-import { TurtleSheetsDataForm } from '../components/TurtleSheetsDataForm';
+import { TurtleSheetsDataForm, type TurtleSheetsDataFormRef } from '../components/TurtleSheetsDataForm';
 
 export default function AdminTurtleRecordsPage() {
   const { role } = useUser();
@@ -55,7 +58,15 @@ export default function AdminTurtleRecordsPage() {
   const [sheetsData, setSheetsData] = useState<TurtleSheetsData | null>(null);
   const [primaryId, setPrimaryId] = useState<string | null>(null);
   const [loadingTurtleData, setLoadingTurtleData] = useState(false);
-
+  /** Names for top-5 candidates (turtle_id -> name from Sheets), loaded when item is selected */
+  const [candidateNames, setCandidateNames] = useState<Record<string, string>>({});
+  /** Original turtle ID from sheet (turtle_id -> sheet's "id" field), not primary_id */
+  const [candidateOriginalIds, setCandidateOriginalIds] = useState<Record<string, string>>({});
+  const [loadingCandidateNames, setLoadingCandidateNames] = useState(false);
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+  const [itemToDelete, setItemToDelete] = useState<ReviewQueueItem | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const sheetsFormRef = useRef<TurtleSheetsDataFormRef>(null);
   // Google Sheets Browser State
   const [allTurtles, setAllTurtles] = useState<TurtleSheetsData[]>([]);
   const [turtlesLoading, setTurtlesLoading] = useState(false);
@@ -114,14 +125,53 @@ export default function AdminTurtleRecordsPage() {
   };
 
   const handleItemSelect = (item: ReviewQueueItem, candidateId?: string) => {
+    const isNewItem = item.request_id !== selectedItem?.request_id;
     setSelectedItem(item);
     setSelectedCandidate(candidateId || null);
     setSheetsData(null);
     setPrimaryId(null);
+    if (isNewItem) {
+      setCandidateNames({});
+      setCandidateOriginalIds({});
+    }
 
     if (candidateId) {
       loadSheetsDataForCandidate(item, candidateId);
     }
+    // Load names for all 5 candidates only when switching to a new queue item
+    if (isNewItem) loadCandidateNames(item);
+  };
+
+  const loadCandidateNames = async (item: ReviewQueueItem) => {
+    if (!item.candidates?.length) return;
+    setLoadingCandidateNames(true);
+    const matchState = item.metadata.state || '';
+    const matchLocation = item.metadata.location || '';
+    const names: Record<string, string> = {};
+    const originalIds: Record<string, string> = {};
+    await Promise.all(
+      item.candidates.map(async (c) => {
+        try {
+          let res = await getTurtleSheetsData(c.turtle_id);
+          if (!res.exists && matchState && (!res.data || Object.keys(res.data || {}).length <= 3)) {
+            try {
+              res = await getTurtleSheetsData(c.turtle_id, matchState, matchState, matchLocation);
+            } catch {
+              // ignore
+            }
+          }
+          if (res.success && res.data) {
+            if (res.data.name) names[c.turtle_id] = res.data.name;
+            if (res.data.id) originalIds[c.turtle_id] = res.data.id;
+          }
+        } catch {
+          // leave name/id empty
+        }
+      })
+    );
+    setCandidateNames(names);
+    setCandidateOriginalIds(originalIds);
+    setLoadingCandidateNames(false);
   };
 
   const loadSheetsDataForCandidate = async (item: ReviewQueueItem, candidateId: string) => {
@@ -158,6 +208,12 @@ export default function AdminTurtleRecordsPage() {
         if (hasRealData) {
           setSheetsData(response.data);
           setPrimaryId(response.data.primary_id || candidateId);
+          if (response.data.name) {
+            setCandidateNames((prev) => ({ ...prev, [candidateId]: response.data!.name! }));
+          }
+          if (response.data.id) {
+            setCandidateOriginalIds((prev) => ({ ...prev, [candidateId]: response.data!.id! }));
+          }
         } else {
           setPrimaryId(candidateId);
           setSheetsData({
@@ -231,36 +287,79 @@ export default function AdminTurtleRecordsPage() {
     setSelectedTurtle({ ...data, primary_id: primaryId, sheet_name: sheetName });
   };
 
-  const handleApproveMatch = async (item: ReviewQueueItem, turtleId: string) => {
-    setProcessing(item.request_id);
+  // Combined: save to sheets and approve match (one button, like AdminTurtleMatchPage)
+  const handleSaveAndApprove = async (data: TurtleSheetsData, sheetName: string) => {
+    if (!selectedItem || !selectedCandidate) {
+      throw new Error('No turtle selected');
+    }
+    setProcessing(selectedItem.request_id);
     try {
-      await approveReview(item.request_id, {
-        match_turtle_id: turtleId,
+      await handleSaveSheetsData(data, sheetName);
+      await approveReview(selectedItem.request_id, {
+        match_turtle_id: selectedCandidate,
       });
-
       notifications.show({
         title: 'Success!',
-        message: 'Match approved successfully',
+        message: 'Saved to Sheets and match approved',
         color: 'green',
         icon: <IconCheck size={18} />,
       });
+      setQueueItems((prev) => prev.filter((i) => i.request_id !== selectedItem.request_id));
+      setSelectedItem(null);
+      setSelectedCandidate(null);
+      setSheetsData(null);
+      setPrimaryId(null);
+    } catch (error) {
+      notifications.show({
+        title: 'Error',
+        message: error instanceof Error ? error.message : 'Failed to save and approve',
+        color: 'red',
+      });
+      throw error;
+    } finally {
+      setProcessing(null);
+    }
+  };
 
-      setQueueItems((prev) => prev.filter((i) => i.request_id !== item.request_id));
-      
-      if (selectedItem?.request_id === item.request_id) {
+  const handleCombinedButtonClick = async () => {
+    if (sheetsFormRef.current) {
+      await sheetsFormRef.current.submit();
+    }
+  };
+
+  const handleOpenDeleteModal = (item: ReviewQueueItem, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setItemToDelete(item);
+    setDeleteModalOpen(true);
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!itemToDelete) return;
+    setDeleting(true);
+    try {
+      await deleteReviewItem(itemToDelete.request_id);
+      notifications.show({
+        title: 'Deleted',
+        message: 'Upload removed from review queue',
+        color: 'green',
+      });
+      setQueueItems((prev) => prev.filter((i) => i.request_id !== itemToDelete.request_id));
+      if (selectedItem?.request_id === itemToDelete.request_id) {
         setSelectedItem(null);
         setSelectedCandidate(null);
         setSheetsData(null);
         setPrimaryId(null);
       }
+      setDeleteModalOpen(false);
+      setItemToDelete(null);
     } catch (error) {
       notifications.show({
         title: 'Error',
-        message: error instanceof Error ? error.message : 'Failed to approve match',
+        message: error instanceof Error ? error.message : 'Failed to delete',
         color: 'red',
       });
     } finally {
-      setProcessing(null);
+      setDeleting(false);
     }
   };
 
@@ -286,23 +385,19 @@ export default function AdminTurtleRecordsPage() {
   return (
     <Container size='xl' py='xl'>
       <Stack gap='lg'>
-        {/* Header */}
-        <Paper shadow='sm' p='xl' radius='md' withBorder>
-          <Stack gap='md'>
-            <Group justify='space-between' align='center'>
-              <div>
-                <Title order={1}>Turtle Records</Title>
-                <Text size='sm' c='dimmed' mt='xs'>
-                  Review queue and manage turtle data in Google Sheets
-                </Text>
-              </div>
-              {activeTab === 'queue' && (
-                <Badge size='lg' variant='light' color='orange' leftSection={<IconPhoto size={14} />}>
-                  {queueItems.length} Pending
-                </Badge>
-              )}
-            </Group>
-          </Stack>
+        {/* Header – compact */}
+        <Paper shadow='sm' p='md' radius='md' withBorder>
+          <Group justify='space-between' align='center' wrap='nowrap' gap='md'>
+            <div>
+              <Title order={2} size='h3'>Turtle Records</Title>
+              <Text size='xs' c='dimmed'>Review queue and Google Sheets</Text>
+            </div>
+            {activeTab === 'queue' && queueItems.length > 0 && (
+              <Badge size='md' variant='light' color='orange' leftSection={<IconPhoto size={12} />}>
+                {queueItems.length} Pending
+              </Badge>
+            )}
+          </Group>
         </Paper>
 
         <Tabs value={activeTab} onChange={(value) => setActiveTab(value || 'queue')}>
@@ -317,13 +412,6 @@ export default function AdminTurtleRecordsPage() {
 
           {/* Tab 1: Review Queue */}
           <Tabs.Panel value='queue' pt='md'>
-            <Alert icon={<IconInfoCircle size={18} />} title='Community Uploads' color='blue' radius='md' mb='md'>
-              <Text size='sm'>
-                These photos were uploaded by community members. Select an item to review matches and
-                manage turtle data in Google Sheets.
-              </Text>
-            </Alert>
-
             {queueLoading ? (
               <Center py='xl'>
                 <Loader size='lg' />
@@ -340,105 +428,82 @@ export default function AdminTurtleRecordsPage() {
                 </Center>
               </Paper>
             ) : (
-              <Grid gutter='lg'>
-                <Grid.Col span={{ base: 12, md: 5 }}>
-                  <Paper shadow='sm' p='md' radius='md' withBorder>
-                    <Stack gap='md'>
-                      <Text fw={500} size='lg'>Pending Reviews</Text>
-                      <ScrollArea h={700}>
-                        <Stack gap='md'>
-                          {queueItems.map((item) => (
-                            <Card
-                              key={item.request_id}
-                              shadow='sm'
-                              padding='md'
-                              radius='md'
-                              withBorder
-                              style={{
-                                cursor: 'pointer',
-                                border:
-                                  selectedItem?.request_id === item.request_id
-                                    ? '2px solid #228be6'
-                                    : '1px solid #dee2e6',
-                                backgroundColor:
-                                  selectedItem?.request_id === item.request_id ? '#e7f5ff' : 'white',
-                              }}
-                              onClick={() => handleItemSelect(item)}
-                            >
-                              <Stack gap='sm'>
-                                <Group justify='space-between'>
-                                  <Badge color='orange' variant='light'>Pending</Badge>
-                                  <Text size='xs' c='dimmed'>{item.metadata.finder || 'Anonymous'}</Text>
-                                </Group>
-                                {item.uploaded_image && (
-                                  <Image
-                                    src={getImageUrl(item.uploaded_image)}
-                                    alt='Uploaded photo'
-                                    radius='md'
-                                    style={{ maxHeight: '150px', objectFit: 'contain' }}
-                                  />
-                                )}
-                                <Text size='sm' c='dimmed'>{item.candidates.length} matches found</Text>
-                                {item.metadata.state && item.metadata.location && (
-                                  <Text size='xs' c='dimmed'>
-                                    Location: {item.metadata.state} / {item.metadata.location}
-                                  </Text>
-                                )}
-                              </Stack>
-                            </Card>
-                          ))}
-                        </Stack>
-                      </ScrollArea>
-                    </Stack>
-                  </Paper>
-                </Grid.Col>
+              <>
+                {selectedItem ? (
+                  <Stack gap='lg' style={{ position: 'relative' }}>
+                    <Group justify='space-between' wrap='nowrap'>
+                      <Button
+                        variant='subtle'
+                        leftSection={<IconList size={16} />}
+                        size='sm'
+                        onClick={() => {
+                          setSelectedItem(null);
+                          setSelectedCandidate(null);
+                          setSheetsData(null);
+                          setPrimaryId(null);
+                        }}
+                      >
+                        ← Back to list ({queueItems.length} pending)
+                      </Button>
+                      <Button
+                        variant='subtle'
+                        color='red'
+                        size='sm'
+                        leftSection={<IconTrash size={16} />}
+                        onClick={(e) => handleOpenDeleteModal(selectedItem, e)}
+                      >
+                        Delete this upload
+                      </Button>
+                    </Group>
 
-                <Grid.Col span={{ base: 12, md: 7 }}>
-                  {selectedItem ? (
-                    <Stack gap='md' style={{ position: 'relative' }}>
-                      {loadingTurtleData && (
-                        <div
-                          style={{
-                            position: 'absolute',
-                            top: 0,
-                            left: 0,
-                            right: 0,
-                            bottom: 0,
-                            backgroundColor: 'rgba(255, 255, 255, 0.95)',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            zIndex: 1000,
-                            borderRadius: 'var(--mantine-radius-md)',
-                          }}
-                        >
-                          <Stack align='center' gap='md'>
-                            <Loader size='xl' />
-                            <Text size='lg' fw={500}>
-                              Loading turtle data…
-                            </Text>
+                    {loadingTurtleData && (
+                      <div
+                        style={{
+                          position: 'absolute',
+                          top: 0,
+                          left: 0,
+                          right: 0,
+                          bottom: 0,
+                          backgroundColor: 'rgba(255, 255, 255, 0.95)',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          zIndex: 1000,
+                          borderRadius: 'var(--mantine-radius-md)',
+                        }}
+                      >
+                        <Stack align='center' gap='md'>
+                          <Loader size='xl' />
+                          <Text size='lg' fw={500}>
+                            Loading turtle data…
+                          </Text>
+                        </Stack>
+                      </div>
+                    )}
+
+                    {/* Compare: Uploaded photo (left) vs Top 5 matches (right) – full width, big thumbnails */}
+                    <Paper shadow='sm' p='md' radius='md' withBorder>
+                      <Grid gutter='lg'>
+                        <Grid.Col span={{ base: 12, md: 4 }}>
+                          <Stack gap='xs'>
+                            <Text fw={600} size='sm' c='dimmed'>Uploaded Photo</Text>
+                            {selectedItem.uploaded_image && (
+                              <Image
+                                src={getImageUrl(selectedItem.uploaded_image)}
+                                alt='Uploaded photo'
+                                radius='md'
+                                style={{ maxHeight: '320px', objectFit: 'contain', width: '100%' }}
+                              />
+                            )}
                           </Stack>
-                        </div>
-                      )}
-                      <Paper shadow='sm' p='md' radius='md' withBorder>
-                        <Stack gap='sm'>
-                          <Text fw={500} size='lg'>Uploaded Photo</Text>
-                          {selectedItem.uploaded_image && (
-                            <Image
-                              src={getImageUrl(selectedItem.uploaded_image)}
-                              alt='Uploaded photo'
-                              radius='md'
-                              style={{ maxHeight: '300px', objectFit: 'contain' }}
-                            />
-                          )}
-                        </Stack>
-                      </Paper>
-
-                      <Paper shadow='sm' p='md' radius='md' withBorder>
-                        <Stack gap='md'>
-                          <Text fw={500} size='lg'>Top 5 Matches</Text>
-                          <ScrollArea h={200}>
-                            <Stack gap='sm'>
+                        </Grid.Col>
+                        <Grid.Col span={{ base: 12, md: 8 }}>
+                          <Stack gap='xs'>
+                            <Group gap='xs'>
+                              <Text fw={600} size='sm' c='dimmed'>Top 5 Matches</Text>
+                              {loadingCandidateNames && <Loader size='xs' />}
+                            </Group>
+                            <Flex gap='sm' wrap='wrap' align='stretch'>
                               {selectedItem.candidates.map((candidate) => (
                                 <Card
                                   key={candidate.turtle_id}
@@ -447,6 +512,9 @@ export default function AdminTurtleRecordsPage() {
                                   radius='md'
                                   withBorder
                                   style={{
+                                    flex: '1 1 0',
+                                    minWidth: 140,
+                                    maxWidth: 220,
                                     cursor: 'pointer',
                                     border:
                                       selectedCandidate === candidate.turtle_id
@@ -457,75 +525,176 @@ export default function AdminTurtleRecordsPage() {
                                   }}
                                   onClick={() => handleItemSelect(selectedItem, candidate.turtle_id)}
                                 >
-                                  <Group justify='space-between'>
-                                    <Group gap='sm'>
-                                      <Badge color='blue' size='sm'>Rank {candidate.rank}</Badge>
-                                      <div>
-                                        <Text fw={500} size='sm'>Turtle ID: {candidate.turtle_id}</Text>
-                                        <Text size='xs' c='dimmed'>Score: {candidate.score}</Text>
-                                      </div>
-                                    </Group>
-                                    {selectedCandidate === candidate.turtle_id && (
-                                      <IconCheck size={20} color='#228be6' />
+                                  <Stack gap={6}>
+                                    {candidate.image_path ? (
+                                      <Image
+                                        src={getImageUrl(candidate.image_path)}
+                                        alt={`Match ${candidate.rank}`}
+                                        radius='sm'
+                                        style={{ height: 200, objectFit: 'cover', width: '100%' }}
+                                      />
+                                    ) : (
+                                      <Center style={{ height: 200 }} c='dimmed'>
+                                        <IconPhoto size={48} />
+                                      </Center>
                                     )}
-                                  </Group>
+                                    <Text fw={600} size='sm' lineClamp={1} title={candidateNames[candidate.turtle_id] || candidate.turtle_id}>
+                                      {candidateNames[candidate.turtle_id] || candidate.turtle_id}
+                                    </Text>
+                                    <Text size='xs' c='dimmed'>
+                                      ID: {candidateOriginalIds[candidate.turtle_id] ?? candidate.turtle_id} · Score: {candidate.score}
+                                    </Text>
+                                    <Badge size='sm' variant='light' color='blue'>#{candidate.rank}</Badge>
+                                    {selectedCandidate === candidate.turtle_id && (
+                                      <IconCheck size={18} color='#228be6' style={{ alignSelf: 'center' }} />
+                                    )}
+                                  </Stack>
                                 </Card>
                               ))}
-                            </Stack>
-                          </ScrollArea>
-                        </Stack>
-                      </Paper>
-
-                      {selectedCandidate ? (
-                    <Paper shadow='sm' p='md' radius='md' withBorder>
-                      <ScrollArea h={300}>
-                        <TurtleSheetsDataForm
-                          initialData={sheetsData || undefined}
-                          sheetName={sheetsData?.sheet_name}
-                          state={state}
-                          location={location}
-                          primaryId={primaryId || undefined}
-                          mode={sheetsData ? 'edit' : 'create'}
-                          onSave={handleSaveSheetsData}
-                        />
-                      </ScrollArea>
+                            </Flex>
+                          </Stack>
+                        </Grid.Col>
+                      </Grid>
                     </Paper>
-                  ) : (
-                        <Paper shadow='sm' p='xl' radius='md' withBorder>
-                          <Center py='xl'>
-                            <Text size='sm' c='dimmed' ta='center'>
-                              Select a match candidate to view and edit Google Sheets data
-                            </Text>
-                          </Center>
-                        </Paper>
-                      )}
 
-                      {selectedCandidate && (
+                    {selectedCandidate ? (
+                      <>
                         <Paper shadow='sm' p='md' radius='md' withBorder>
-                          <Group justify='flex-end' gap='md'>
+                          <Text fw={600} size='md' mb='sm'>Google Sheets – selected match</Text>
+                          <ScrollArea h={520} type='auto'>
+                            <TurtleSheetsDataForm
+                              ref={sheetsFormRef}
+                              initialData={sheetsData || undefined}
+                              sheetName={sheetsData?.sheet_name}
+                              state={state}
+                              location={location}
+                              primaryId={primaryId || undefined}
+                              mode={sheetsData ? 'edit' : 'create'}
+                              onSave={handleSaveSheetsData}
+                              hideSubmitButton
+                              onCombinedSubmit={handleSaveAndApprove}
+                            />
+                          </ScrollArea>
+                          <Group justify='flex-end' gap='md' mt='md'>
                             <Button
-                              onClick={() => handleApproveMatch(selectedItem, selectedCandidate)}
+                              onClick={handleCombinedButtonClick}
                               loading={processing === selectedItem.request_id}
                               disabled={processing === selectedItem.request_id}
                               leftSection={<IconCheck size={16} />}
                             >
-                              Approve Match
+                              Save to Sheets & Approve Match
                             </Button>
                           </Group>
                         </Paper>
-                      )}
+                      </>
+                    ) : (
+                      <Paper shadow='sm' p='xl' radius='md' withBorder>
+                        <Center py='xl'>
+                          <Text size='sm' c='dimmed' ta='center'>
+                            Select one of the top 5 matches above to view and edit its Google Sheets data
+                          </Text>
+                        </Center>
+                      </Paper>
+                    )}
+                  </Stack>
+                ) : (
+                  /* Pending list prominently in main area */
+                  <Paper shadow='sm' p='lg' radius='md' withBorder style={{ overflow: 'hidden' }}>
+                    <Stack gap='md' style={{ minWidth: 0 }}>
+                      <Text fw={600} size='lg'>Pending Reviews</Text>
+                      <Text size='sm' c='dimmed'>
+                        Click an item to review matches and approve.
+                      </Text>
+                      <ScrollArea h={560} type='auto' scrollbars='y'>
+                        <Grid gutter='md' style={{ minWidth: 0 }}>
+                          {queueItems.map((item) => (
+                            <Grid.Col key={item.request_id} span={{ base: 12, sm: 6, md: 4 }}>
+                              <Card
+                                shadow='sm'
+                                padding='md'
+                                radius='md'
+                                withBorder
+                                style={{
+                                  cursor: 'pointer',
+                                  border: '1px solid #dee2e6',
+                                  height: '100%',
+                                }}
+                                onClick={() => handleItemSelect(item)}
+                              >
+                                <Stack gap='sm'>
+                                  <Group justify='space-between'>
+                                    <Badge color='orange' variant='light' size='sm'>Pending</Badge>
+                                    <Group gap='xs'>
+                                      <Text size='xs' c='dimmed'>{item.metadata.finder || 'Anonymous'}</Text>
+                                      <Button
+                                        variant='subtle'
+                                        color='red'
+                                        size='compact-xs'
+                                        leftSection={<IconTrash size={14} />}
+                                        onClick={(e) => handleOpenDeleteModal(item, e)}
+                                        title='Remove from queue (e.g. junk)'
+                                      >
+                                        Delete
+                                      </Button>
+                                    </Group>
+                                  </Group>
+                                  {item.uploaded_image && (
+                                    <Image
+                                      src={getImageUrl(item.uploaded_image)}
+                                      alt='Uploaded'
+                                      radius='md'
+                                      style={{ maxHeight: 180, objectFit: 'contain' }}
+                                    />
+                                  )}
+                                  <Text size='sm' c='dimmed'>{item.candidates.length} matches</Text>
+                                  {item.metadata.state && item.metadata.location && (
+                                    <Text size='xs' c='dimmed'>
+                                      {item.metadata.state} / {item.metadata.location}
+                                    </Text>
+                                  )}
+                                </Stack>
+                              </Card>
+                            </Grid.Col>
+                          ))}
+                        </Grid>
+                      </ScrollArea>
                     </Stack>
-                  ) : (
-                    <Paper shadow='sm' p='xl' radius='md' withBorder>
-                      <Center py='xl'>
-                        <Text size='sm' c='dimmed' ta='center'>
-                          Select an item to review
-                        </Text>
-                      </Center>
-                    </Paper>
-                  )}
-                </Grid.Col>
-              </Grid>
+                  </Paper>
+                )}
+
+                <Modal
+                  opened={deleteModalOpen}
+                  onClose={() => { if (!deleting) { setDeleteModalOpen(false); setItemToDelete(null); } }}
+                  title='Remove upload from queue'
+                  centered
+                >
+                  <Stack gap='md'>
+                    <Text size='sm' c='dimmed'>
+                      This will permanently delete this upload from the review queue. It will not be processed or added to any turtle. Use this for junk or spam only.
+                    </Text>
+                    <Text size='sm' fw={500}>
+                      This cannot be undone.
+                    </Text>
+                    <Group justify='flex-end' gap='sm'>
+                      <Button
+                        variant='default'
+                        onClick={() => { setDeleteModalOpen(false); setItemToDelete(null); }}
+                        disabled={deleting}
+                      >
+                        Cancel
+                      </Button>
+                      <Button
+                        color='red'
+                        leftSection={<IconTrash size={16} />}
+                        loading={deleting}
+                        onClick={handleConfirmDelete}
+                      >
+                        Delete from queue
+                      </Button>
+                    </Group>
+                  </Stack>
+                </Modal>
+              </>
             )}
           </Tabs.Panel>
 

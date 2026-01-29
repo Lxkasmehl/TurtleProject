@@ -5,6 +5,8 @@ Handles all interactions with Google Sheets for turtle data management.
 
 import os
 import ssl
+import threading
+import time
 from typing import Dict, List, Optional, Any
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
@@ -30,6 +32,10 @@ class GoogleSheetsService:
     # Reverse mapping: internal field names to Google Sheets column headers
     FIELD_TO_COLUMN = FIELD_TO_COLUMN
 
+    # Lock for list_sheets to avoid concurrent Google API calls (reduces SSL errors)
+    _list_sheets_lock = threading.Lock()
+    LIST_SHEETS_CACHE_TTL_SEC = 30
+
     def __init__(self, spreadsheet_id: Optional[str] = None, credentials_path: Optional[str] = None):
         """
         Initialize Google Sheets Service.
@@ -49,6 +55,10 @@ class GoogleSheetsService:
         
         if not os.path.exists(credentials_file):
             raise FileNotFoundError(f"Credentials file not found: {credentials_file}")
+        
+        # Cache for list_sheets to reduce concurrent API calls and SSL issues
+        self._list_sheets_cache = None
+        self._list_sheets_cache_time = 0.0
         
         # Authenticate
         try:
@@ -105,6 +115,7 @@ class GoogleSheetsService:
                 scopes=['https://www.googleapis.com/auth/spreadsheets']
             )
             self.service = build('sheets', 'v4', credentials=credentials)
+            self._invalidate_list_sheets_cache()
             print("✅ Google Sheets service reinitialized")
         except Exception as e:
             print(f"⚠️ Failed to reinitialize Google Sheets service: {e}")
@@ -164,12 +175,34 @@ class GoogleSheetsService:
         )
 
     # Sheet management methods
+    def _invalidate_list_sheets_cache(self):
+        """Invalidate cached sheet list (e.g. after creating a new sheet)."""
+        self._list_sheets_cache = None
+
     def list_sheets(self) -> List[str]:
-        """List all available sheets (tabs) in the spreadsheet."""
-        return sheet_management.list_sheets(self.service, self.spreadsheet_id, self._reinitialize_service)
-    
+        """List all available sheets (tabs) in the spreadsheet.
+        Uses a lock and short-lived cache to avoid concurrent Google API calls
+        that can trigger SSL errors (DECRYPTION_FAILED_OR_BAD_RECORD_MAC, WRONG_VERSION_NUMBER).
+        """
+        with self._list_sheets_lock:
+            now = time.time()
+            if (
+                self._list_sheets_cache is not None
+                and (now - self._list_sheets_cache_time) < self.LIST_SHEETS_CACHE_TTL_SEC
+            ):
+                return list(self._list_sheets_cache)
+            result = sheet_management.list_sheets(
+                self.service, self.spreadsheet_id, self._reinitialize_service
+            )
+            self._list_sheets_cache = result
+            self._list_sheets_cache_time = time.time()
+            return result
+
     def create_sheet_with_headers(self, sheet_name: str) -> bool:
         """Create a new sheet (tab) with all required headers."""
-        return sheet_management.create_sheet_with_headers(
+        result = sheet_management.create_sheet_with_headers(
             self.service, self.spreadsheet_id, sheet_name, self.COLUMN_MAPPING, self.list_sheets
         )
+        if result:
+            self._invalidate_list_sheets_cache()
+        return result

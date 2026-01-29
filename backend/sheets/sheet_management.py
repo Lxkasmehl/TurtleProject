@@ -211,7 +211,7 @@ def list_sheets(service, spreadsheet_id: str, reinitialize_service_func, max_ret
                 try:
                     reinitialize_service_func()
                     import time
-                    time.sleep(0.5)  # Brief delay before retry
+                    time.sleep(1.0)  # Allow new connection to settle before retry
                     continue
                 except:
                     pass
@@ -228,7 +228,7 @@ def list_sheets(service, spreadsheet_id: str, reinitialize_service_func, max_ret
                     try:
                         reinitialize_service_func()
                         import time
-                        time.sleep(0.5)  # Brief delay before retry
+                        time.sleep(1.0)  # Allow new connection to settle before retry
                         continue
                     except Exception as reinit_error:
                         print(f"Failed to reinitialize: {reinit_error}")
@@ -248,7 +248,7 @@ def list_sheets(service, spreadsheet_id: str, reinitialize_service_func, max_ret
                     try:
                         reinitialize_service_func()
                         import time
-                        time.sleep(0.5)  # Brief delay before retry
+                        time.sleep(1.0)  # Allow new connection to settle before retry
                         continue
                     except Exception as reinit_error:
                         print(f"Failed to reinitialize: {reinit_error}")

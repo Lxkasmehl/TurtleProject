@@ -92,6 +92,25 @@ def register_review_routes(app):
         except Exception as e:
             return jsonify({'error': f'Failed to load review queue: {str(e)}'}), 500
 
+    @app.route('/api/review/<request_id>', methods=['DELETE'])
+    @require_admin
+    def delete_review(request_id):
+        """
+        Delete a review queue item without processing (Admin only).
+        Use for junk/spam. Requires confirmation in the frontend.
+        """
+        if not manager_ready.wait(timeout=30):
+            return jsonify({'error': 'TurtleManager is still initializing. Please try again in a moment.'}), 503
+        if manager is None:
+            return jsonify({'error': 'TurtleManager failed to initialize'}), 500
+        try:
+            success, message = manager.reject_review_packet(request_id)
+            if success:
+                return jsonify({'success': True, 'message': message})
+            return jsonify({'error': message}), 400
+        except Exception as e:
+            return jsonify({'error': str(e)}), 500
+
     @app.route('/api/review/<request_id>/approve', methods=['POST'])
     @require_admin
     def approve_review(request_id):

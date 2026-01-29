@@ -535,6 +535,26 @@ class TurtleManager:
         
         return True, "Processed successfully"
 
+    def reject_review_packet(self, request_id):
+        """
+        Delete a review queue packet without processing (e.g. junk/spam).
+        Removes the packet folder from Review_Queue. Admin only.
+        """
+        packet_dir = os.path.join(self.review_queue_dir, request_id)
+        if not os.path.exists(packet_dir) or not os.path.isdir(packet_dir):
+            return False, "Request not found"
+        # Security: ensure we only delete inside review_queue_dir (no path traversal)
+        real_packet = os.path.realpath(packet_dir)
+        real_base = os.path.realpath(self.review_queue_dir)
+        if not real_packet.startswith(real_base):
+            return False, "Invalid request path"
+        try:
+            shutil.rmtree(packet_dir)
+            print(f"🗑️ Queue Item {request_id} deleted (Rejected/Discarded).")
+            return True, "Deleted"
+        except Exception as e:
+            return False, str(e)
+
 # --- TEST BLOCK ---
 if __name__ == "__main__":
     manager = TurtleManager()

@@ -346,6 +346,24 @@ export const approveReview = async (
   return await response.json();
 };
 
+// Delete review queue item (Admin only) – no processing, removes packet
+export const deleteReviewItem = async (requestId: string): Promise<{ success: boolean; message: string }> => {
+  const token = getToken();
+  const headers: Record<string, string> = {};
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
+  const response = await fetch(`${TURTLE_API_BASE_URL}/review/${encodeURIComponent(requestId)}`, {
+    method: 'DELETE',
+    headers,
+  });
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ error: 'Failed to delete' }));
+    throw new Error(error.error || 'Failed to delete review item');
+  }
+  return await response.json();
+};
+
 // Get image URL helper
 export const getImageUrl = (imagePath: string): string => {
   // Convert file path to API endpoint
