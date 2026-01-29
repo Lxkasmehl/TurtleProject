@@ -18,6 +18,7 @@ import {
   TextInput,
   Flex,
   Modal,
+  Select,
 } from '@mantine/core';
 import {
   IconPhoto,
@@ -26,6 +27,7 @@ import {
   IconSearch,
   IconList,
   IconTrash,
+  IconMapPin,
 } from '@tabler/icons-react';
 import { useEffect, useState, useRef } from 'react';
 import { useUser } from '../hooks/useUser';
@@ -39,6 +41,7 @@ import {
   type ReviewQueueItem,
   updateTurtleSheetsData,
   listAllTurtlesFromSheets,
+  listSheets,
   type TurtleSheetsData,
 } from '../services/api';
 import { notifications } from '@mantine/notifications';
@@ -72,6 +75,10 @@ export default function AdminTurtleRecordsPage() {
   const [turtlesLoading, setTurtlesLoading] = useState(false);
   const [selectedTurtle, setSelectedTurtle] = useState<TurtleSheetsData | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
+  /** Filter by spreadsheet/location (sheet name). '' = all sheets */
+  const [selectedSheetFilter, setSelectedSheetFilter] = useState<string>('');
+  const [availableSheets, setAvailableSheets] = useState<string[]>([]);
+  const [sheetsListLoading, setSheetsListLoading] = useState(false);
 
   useEffect(() => {
     if (role !== 'admin') {
@@ -84,8 +91,10 @@ export default function AdminTurtleRecordsPage() {
       const interval = setInterval(loadQueue, 30000);
       return () => clearInterval(interval);
     } else if (activeTab === 'sheets') {
-      loadAllTurtles();
+      loadAvailableSheets();
+      loadAllTurtles(selectedSheetFilter || undefined);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- only run when tab changes; filter changes trigger load from Select onChange
   }, [role, navigate, activeTab]);
 
   const loadQueue = async () => {
@@ -105,10 +114,28 @@ export default function AdminTurtleRecordsPage() {
     }
   };
 
-  const loadAllTurtles = async () => {
+  const loadAvailableSheets = async () => {
+    setSheetsListLoading(true);
+    try {
+      const response = await listSheets();
+      if (response.success && response.sheets?.length) {
+        setAvailableSheets(response.sheets);
+      } else {
+        setAvailableSheets([]);
+      }
+    } catch (error) {
+      console.error('Error loading sheets list:', error);
+      setAvailableSheets([]);
+    } finally {
+      setSheetsListLoading(false);
+    }
+  };
+
+  const loadAllTurtles = async (sheetFilter?: string) => {
+    const sheetToLoad = sheetFilter !== undefined ? sheetFilter : selectedSheetFilter;
     setTurtlesLoading(true);
     try {
-      const response = await listAllTurtlesFromSheets(undefined);
+      const response = await listAllTurtlesFromSheets(sheetToLoad || undefined);
       if (response.success) {
         setAllTurtles(response.turtles);
       }
@@ -705,13 +732,33 @@ export default function AdminTurtleRecordsPage() {
                 <Paper shadow='sm' p='md' radius='md' withBorder>
                   <Stack gap='md'>
                     <Text fw={500} size='lg'>Search & Filter</Text>
+                    <Select
+                      label='Location (Spreadsheet)'
+                      description={sheetsListLoading ? 'Loading locations…' : selectedSheetFilter ? 'Only turtles from this sheet' : 'All sheets'}
+                      placeholder='All locations'
+                      leftSection={<IconMapPin size={16} />}
+                      value={selectedSheetFilter}
+                      onChange={(value) => {
+                        const next = value ?? '';
+                        setSelectedSheetFilter(next);
+                        loadAllTurtles(next || undefined);
+                      }}
+                      data={[
+                        { value: '', label: 'All locations' },
+                        ...availableSheets.map((s) => ({ value: s, label: s })),
+                      ]}
+                      allowDeselect={false}
+                      searchable
+                      clearable={false}
+                      disabled={sheetsListLoading}
+                    />
                     <TextInput
                       placeholder='Search by ID, name, species, location...'
                       leftSection={<IconSearch size={16} />}
                       value={searchQuery}
                       onChange={(e) => setSearchQuery(e.target.value)}
                     />
-                    <Button onClick={loadAllTurtles} loading={turtlesLoading} fullWidth>
+                    <Button onClick={() => loadAllTurtles()} loading={turtlesLoading} fullWidth>
                       Refresh
                     </Button>
                     <Divider />
