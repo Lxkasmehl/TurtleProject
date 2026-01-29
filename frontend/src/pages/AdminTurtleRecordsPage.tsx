@@ -49,6 +49,7 @@ import {
 } from '../services/api';
 import { notifications } from '@mantine/notifications';
 import { TurtleSheetsDataForm, type TurtleSheetsDataFormRef } from '../components/TurtleSheetsDataForm';
+import { MapDisplay } from '../components/MapDisplay';
 
 export default function AdminTurtleRecordsPage() {
   const { role } = useUser();
@@ -700,6 +701,32 @@ export default function AdminTurtleRecordsPage() {
                       </Grid>
                     </Paper>
 
+                    {/* Location hint from community (coords + map) – only when present */}
+                    {selectedItem.metadata.location_hint_lat != null && selectedItem.metadata.location_hint_lon != null && (
+                      <Paper shadow='sm' p='md' radius='md' withBorder>
+                        <Stack gap='sm'>
+                          <Group gap='xs'>
+                            <IconMapPin size={18} />
+                            <Text fw={600} size='sm'>Location hint from uploader</Text>
+                            {selectedItem.metadata.location_hint_source && (
+                              <Badge size='sm' variant='light' color='blue'>
+                                {selectedItem.metadata.location_hint_source}
+                              </Badge>
+                            )}
+                          </Group>
+                          <Text size='xs' c='dimmed'>
+                            {selectedItem.metadata.location_hint_lat.toFixed(5)}, {selectedItem.metadata.location_hint_lon.toFixed(5)}
+                          </Text>
+                          <MapDisplay
+                            latitude={selectedItem.metadata.location_hint_lat}
+                            longitude={selectedItem.metadata.location_hint_lon}
+                            height={220}
+                            zoom={15}
+                          />
+                        </Stack>
+                      </Paper>
+                    )}
+
                     {selectedCandidate ? (
                       <>
                         <Paper shadow='sm' p='md' radius='md' withBorder>
@@ -712,6 +739,15 @@ export default function AdminTurtleRecordsPage() {
                               state={state}
                               location={location}
                               hintLocationFromCommunity={state && location ? `${state} / ${location}` : (state || location) || undefined}
+                              hintCoordinates={
+                                selectedItem?.metadata?.location_hint_lat != null && selectedItem?.metadata?.location_hint_lon != null
+                                  ? {
+                                      latitude: selectedItem.metadata.location_hint_lat,
+                                      longitude: selectedItem.metadata.location_hint_lon,
+                                      source: selectedItem.metadata.location_hint_source,
+                                    }
+                                  : undefined
+                              }
                               primaryId={primaryId || undefined}
                               mode={sheetsData ? 'edit' : 'create'}
                               onSave={handleSaveSheetsData}
@@ -814,6 +850,12 @@ export default function AdminTurtleRecordsPage() {
                                   {item.metadata.state && item.metadata.location && (
                                     <Text size='xs' c='dimmed'>
                                       {item.metadata.state} / {item.metadata.location}
+                                    </Text>
+                                  )}
+                                  {item.metadata.location_hint_lat != null && item.metadata.location_hint_lon != null && (
+                                    <Text size='xs' c='dimmed'>
+                                      📍 Hint: {item.metadata.location_hint_lat.toFixed(5)}, {item.metadata.location_hint_lon.toFixed(5)}
+                                      {item.metadata.location_hint_source ? ` (${item.metadata.location_hint_source})` : ''}
                                     </Text>
                                   )}
                                 </Stack>
@@ -1040,6 +1082,15 @@ export default function AdminTurtleRecordsPage() {
               selectedItem?.metadata?.state && selectedItem?.metadata?.location
                 ? `${selectedItem.metadata.state} / ${selectedItem.metadata.location}`
                 : selectedItem?.metadata?.state || selectedItem?.metadata?.location || undefined
+            }
+            hintCoordinates={
+              selectedItem?.metadata?.location_hint_lat != null && selectedItem?.metadata?.location_hint_lon != null
+                ? {
+                    latitude: selectedItem.metadata.location_hint_lat,
+                    longitude: selectedItem.metadata.location_hint_lon,
+                    source: selectedItem.metadata.location_hint_source,
+                  }
+                : undefined
             }
             primaryId={newTurtlePrimaryId || undefined}
             mode='create'

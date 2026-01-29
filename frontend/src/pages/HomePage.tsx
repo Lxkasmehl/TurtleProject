@@ -52,8 +52,9 @@ export default function HomePage() {
     isDuplicate,
     previousUploadDate,
     isGettingLocation,
-    locationData,
-    setLocationData,
+    locationHint,
+    setLocationHint,
+    requestLocationHint,
     handleDrop,
     handleUpload,
     handleRemove,
@@ -258,8 +259,9 @@ export default function HomePage() {
             previousUploadDate={previousUploadDate}
             isGettingLocation={isGettingLocation}
             role={role}
-            locationData={locationData}
-            setLocationData={setLocationData}
+            locationHint={locationHint}
+            setLocationHint={setLocationHint}
+            requestLocationHint={requestLocationHint}
             onUpload={handleUpload}
             onRemove={handleRemove}
           />

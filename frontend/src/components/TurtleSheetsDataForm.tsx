@@ -17,9 +17,11 @@ import {
   Title,
   Loader,
   Modal,
+  Anchor,
 } from '@mantine/core';
 import { useState, useEffect, useImperativeHandle, forwardRef } from 'react';
-import { IconInfoCircle, IconCheck, IconX } from '@tabler/icons-react';
+import { IconInfoCircle, IconCheck, IconX, IconMapPin } from '@tabler/icons-react';
+import { MapDisplay } from './MapDisplay';
 import { notifications } from '@mantine/notifications';
 import type { TurtleSheetsData } from '../services/api';
 import { listSheets, createSheet } from '../services/api';
@@ -31,6 +33,8 @@ interface TurtleSheetsDataFormProps {
   location?: string;
   /** Shown as help only (e.g. community-indicated location); not used as form field values */
   hintLocationFromCommunity?: string;
+  /** Optional coordinates hint from community (never stored in sheets) */
+  hintCoordinates?: { latitude: number; longitude: number; source?: 'gps' | 'manual' };
   primaryId?: string;
   onSave: (data: TurtleSheetsData, sheetName: string) => Promise<void>;
   onCancel?: () => void;
@@ -47,6 +51,7 @@ export const TurtleSheetsDataForm = forwardRef<TurtleSheetsDataFormRef, TurtleSh
   initialData,
   sheetName: initialSheetName,
   hintLocationFromCommunity,
+  hintCoordinates,
   primaryId,
   onSave,
   onCancel,
@@ -409,10 +414,39 @@ export const TurtleSheetsDataForm = forwardRef<TurtleSheetsDataFormRef, TurtleSh
           </Grid.Col>
 
           {/* Row 5: Location – only form values; community location shown as hint only when provided */}
-          {hintLocationFromCommunity && (
+          {(hintLocationFromCommunity || hintCoordinates) && (
             <Grid.Col span={12}>
               <Alert variant="light" color="blue" icon={<IconInfoCircle size={16} />} title="Community member indicated">
-                <Text size="sm">Location: {hintLocationFromCommunity} (for reference only; not pre-filled)</Text>
+                <Stack gap="xs">
+                  {hintLocationFromCommunity && (
+                    <Text size="sm">Location: {hintLocationFromCommunity} (for reference only; not pre-filled)</Text>
+                  )}
+                  {hintCoordinates && (
+                    <>
+                      <Text size="sm">
+                        Coordinates: {hintCoordinates.latitude.toFixed(5)}, {hintCoordinates.longitude.toFixed(5)}
+                        {hintCoordinates.source && ` (${hintCoordinates.source})`}
+                      </Text>
+                      <MapDisplay
+                        latitude={hintCoordinates.latitude}
+                        longitude={hintCoordinates.longitude}
+                        height={200}
+                        zoom={15}
+                      />
+                      <Anchor
+                        size="sm"
+                        href={`https://www.openstreetmap.org/?mlat=${hintCoordinates.latitude}&mlon=${hintCoordinates.longitude}&zoom=17`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                      >
+                        <Group gap={4} wrap="nowrap">
+                          <IconMapPin size={14} />
+                          <span>Open in OpenStreetMap</span>
+                        </Group>
+                      </Anchor>
+                    </>
+                  )}
+                </Stack>
               </Alert>
             </Grid.Col>
           )}

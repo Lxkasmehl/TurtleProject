@@ -215,6 +215,13 @@ export interface UploadPhotoResponse {
   message: string;
 }
 
+/** Location hint from community (never stored in sheets, queue/display only) */
+export interface LocationHint {
+  latitude: number;
+  longitude: number;
+  source: 'gps' | 'manual';
+}
+
 export interface ReviewQueueItem {
   request_id: string;
   uploaded_image: string;
@@ -224,6 +231,10 @@ export interface ReviewQueueItem {
     uploaded_at?: number;
     state?: string;
     location?: string;
+    /** Hint only – never stored in sheets */
+    location_hint_lat?: number;
+    location_hint_lon?: number;
+    location_hint_source?: 'gps' | 'manual';
   };
   candidates: Array<{
     rank: number;
@@ -257,7 +268,9 @@ export const uploadTurtlePhoto = async (
   file: File,
   _role: 'admin' | 'community', // Used by frontend for navigation logic, not sent to backend
   _email: string, // Used by frontend, not sent to backend
-  location?: { state: string; location: string }
+  location?: { state: string; location: string },
+  /** Optional: coordinates as hint only (never stored in sheets) */
+  locationHint?: LocationHint
 ): Promise<UploadPhotoResponse> => {
   const formData = new FormData();
   formData.append('file', file);
@@ -267,6 +280,11 @@ export const uploadTurtlePhoto = async (
   if (location) {
     formData.append('state', location.state);
     formData.append('location', location.location);
+  }
+  if (locationHint) {
+    formData.append('location_hint_lat', String(locationHint.latitude));
+    formData.append('location_hint_lon', String(locationHint.longitude));
+    formData.append('location_hint_source', locationHint.source);
   }
 
   const token = getToken();

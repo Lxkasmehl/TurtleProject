@@ -71,6 +71,10 @@ def register_upload_routes(app):
             file = request.files['file']
             state = request.form.get('state', '')  # Optional: State where turtle was found
             location = request.form.get('location', '')  # Optional: Specific location
+            # Optional: GPS/manual coordinates as hint only (never stored in sheets)
+            location_hint_lat = request.form.get('location_hint_lat', type=float)
+            location_hint_lon = request.form.get('location_hint_lon', type=float)
+            location_hint_source = request.form.get('location_hint_source', '')  # 'gps' or 'manual'
             
             if file.filename == '':
                 return jsonify({'error': 'No file selected'}), 400
@@ -146,6 +150,12 @@ def register_upload_routes(app):
                 if state and location:
                     user_info['state'] = state
                     user_info['location'] = location
+                # Add location hint (coords) if provided – hint only, never stored in sheets
+                if location_hint_lat is not None and location_hint_lon is not None:
+                    user_info['location_hint_lat'] = location_hint_lat
+                    user_info['location_hint_lon'] = location_hint_lon
+                    if location_hint_source in ('gps', 'manual'):
+                        user_info['location_hint_source'] = location_hint_source
                 
                 request_id = manager.create_review_packet(
                     temp_path,
