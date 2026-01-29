@@ -32,6 +32,7 @@ import {
   getReviewQueue,
   approveReview,
   getImageUrl,
+  getTurtleSheetsData,
   type ReviewQueueItem,
   updateTurtleSheetsData,
   listAllTurtlesFromSheets,
@@ -53,6 +54,7 @@ export default function AdminTurtleRecordsPage() {
   const [processing, setProcessing] = useState<string | null>(null);
   const [sheetsData, setSheetsData] = useState<TurtleSheetsData | null>(null);
   const [primaryId, setPrimaryId] = useState<string | null>(null);
+  const [loadingTurtleData, setLoadingTurtleData] = useState(false);
 
   // Google Sheets Browser State
   const [allTurtles, setAllTurtles] = useState<TurtleSheetsData[]>([]);
@@ -116,18 +118,72 @@ export default function AdminTurtleRecordsPage() {
     setSelectedCandidate(candidateId || null);
     setSheetsData(null);
     setPrimaryId(null);
-    
+
     if (candidateId) {
       loadSheetsDataForCandidate(item, candidateId);
     }
   };
 
-  const loadSheetsDataForCandidate = async (_item: ReviewQueueItem, candidateId: string) => {
-    // Don't auto-load - let user select sheet first
-    setSheetsData({
-      id: candidateId,
-    });
-    setPrimaryId(candidateId);
+  const loadSheetsDataForCandidate = async (item: ReviewQueueItem, candidateId: string) => {
+    setLoadingTurtleData(true);
+
+    const matchState = item.metadata.state || '';
+    const matchLocation = item.metadata.location || '';
+
+    try {
+      let response = await getTurtleSheetsData(candidateId);
+
+      if (!response.exists && matchState && (!response.data || Object.keys(response.data).length <= 3)) {
+        try {
+          response = await getTurtleSheetsData(candidateId, matchState, matchState, matchLocation);
+        } catch {
+          // Ignore, use first response
+        }
+      }
+
+      if (response.success && response.data) {
+        const hasRealData =
+          response.exists ||
+          !!(
+            response.data.name ||
+            response.data.species ||
+            response.data.sex ||
+            response.data.transmitter_id ||
+            response.data.sheet_name ||
+            response.data.date_1st_found ||
+            response.data.notes ||
+            Object.keys(response.data).length > 3
+          );
+
+        if (hasRealData) {
+          setSheetsData(response.data);
+          setPrimaryId(response.data.primary_id || candidateId);
+        } else {
+          setPrimaryId(candidateId);
+          setSheetsData({
+            id: candidateId,
+            general_location: matchState || '',
+            location: matchLocation || '',
+          });
+        }
+      } else {
+        setPrimaryId(candidateId);
+        setSheetsData({
+          id: candidateId,
+          general_location: matchState || '',
+          location: matchLocation || '',
+        });
+      }
+    } catch {
+      setPrimaryId(candidateId);
+      setSheetsData({
+        id: candidateId,
+        general_location: matchState || '',
+        location: matchLocation || '',
+      });
+    } finally {
+      setLoadingTurtleData(false);
+    }
   };
 
 
@@ -339,7 +395,31 @@ export default function AdminTurtleRecordsPage() {
 
                 <Grid.Col span={{ base: 12, md: 7 }}>
                   {selectedItem ? (
-                    <Stack gap='md'>
+                    <Stack gap='md' style={{ position: 'relative' }}>
+                      {loadingTurtleData && (
+                        <div
+                          style={{
+                            position: 'absolute',
+                            top: 0,
+                            left: 0,
+                            right: 0,
+                            bottom: 0,
+                            backgroundColor: 'rgba(255, 255, 255, 0.95)',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            zIndex: 1000,
+                            borderRadius: 'var(--mantine-radius-md)',
+                          }}
+                        >
+                          <Stack align='center' gap='md'>
+                            <Loader size='xl' />
+                            <Text size='lg' fw={500}>
+                              Loading turtle data…
+                            </Text>
+                          </Stack>
+                        </div>
+                      )}
                       <Paper shadow='sm' p='md' radius='md' withBorder>
                         <Stack gap='sm'>
                           <Text fw={500} size='lg'>Uploaded Photo</Text>
