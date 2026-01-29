@@ -29,6 +29,8 @@ interface TurtleSheetsDataFormProps {
   sheetName?: string; // Selected sheet name
   state?: string;
   location?: string;
+  /** Shown as help only (e.g. community-indicated location); not used as form field values */
+  hintLocationFromCommunity?: string;
   primaryId?: string;
   onSave: (data: TurtleSheetsData, sheetName: string) => Promise<void>;
   onCancel?: () => void;
@@ -44,14 +46,14 @@ export interface TurtleSheetsDataFormRef {
 export const TurtleSheetsDataForm = forwardRef<TurtleSheetsDataFormRef, TurtleSheetsDataFormProps>(({
   initialData,
   sheetName: initialSheetName,
-  state,
-  location,
+  hintLocationFromCommunity,
   primaryId,
   onSave,
   onCancel,
   mode,
   hideSubmitButton = false,
   onCombinedSubmit,
+  // state/location accepted for API compatibility but not used as form values – use hintLocationFromCommunity for display
 }, ref) => {
   const [formData, setFormData] = useState<TurtleSheetsData>(initialData || {});
   const [loading, setLoading] = useState(false);
@@ -406,12 +408,19 @@ export const TurtleSheetsDataForm = forwardRef<TurtleSheetsDataFormRef, TurtleSh
             />
           </Grid.Col>
 
-          {/* Row 5: Location */}
+          {/* Row 5: Location – only form values; community location shown as hint only when provided */}
+          {hintLocationFromCommunity && (
+            <Grid.Col span={12}>
+              <Alert variant="light" color="blue" icon={<IconInfoCircle size={16} />} title="Community member indicated">
+                <Text size="sm">Location: {hintLocationFromCommunity} (for reference only; not pre-filled)</Text>
+              </Alert>
+            </Grid.Col>
+          )}
           <Grid.Col span={{ base: 12, md: 6 }}>
             <TextInput
               label='General Location'
               placeholder='General location'
-              value={formData.general_location || state || ''}
+              value={formData.general_location ?? ''}
               onChange={(e) => handleChange('general_location', e.target.value)}
             />
           </Grid.Col>
@@ -419,7 +428,7 @@ export const TurtleSheetsDataForm = forwardRef<TurtleSheetsDataFormRef, TurtleSh
             <TextInput
               label='Location'
               placeholder='Specific location'
-              value={formData.location || location || ''}
+              value={formData.location ?? ''}
               onChange={(e) => handleChange('location', e.target.value)}
             />
           </Grid.Col>

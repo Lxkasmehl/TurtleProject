@@ -187,11 +187,7 @@ def register_review_routes(app):
                                 # Keep user-provided 'id' if present, otherwise use primary_id as fallback
                                 if 'id' not in turtle_data or not turtle_data.get('id'):
                                     turtle_data['id'] = primary_id
-                                # Ensure location fields are set
-                                if 'general_location' not in turtle_data or not turtle_data.get('general_location'):
-                                    turtle_data['general_location'] = state
-                                if 'location' not in turtle_data or not turtle_data.get('location'):
-                                    turtle_data['location'] = location
+                                # Do not set general_location or location from state/location – leave empty if admin did not fill them; community location is for display only
                                 
                                 # Determine sheet_name from the turtle data or use a default
                                 sheet_name = sheets_data.get('sheet_name') if isinstance(sheets_data, dict) else 'Location A'

@@ -37,13 +37,11 @@ def register_sheets_routes(app):
                     sheet_name = None
                 
                 if not sheet_name:
-                    # Turtle doesn't exist in any sheet - return empty structure for new turtle
+                    # Turtle doesn't exist in any sheet - return empty structure for new turtle (do not pre-fill general_location/location from state/location)
                     return jsonify({
                         'success': True,
                         'data': {
                             'id': primary_id,  # Use the provided primary_id
-                            'general_location': state or '',
-                            'location': location or '',
                         },
                         'exists': False
                     })
@@ -54,8 +52,6 @@ def register_sheets_routes(app):
                     'success': True,
                     'data': {
                         'id': primary_id,
-                        'general_location': state or '',
-                        'location': location or '',
                     },
                     'exists': False
                 })
@@ -70,8 +66,6 @@ def register_sheets_routes(app):
                     'success': True,
                     'data': {
                         'id': primary_id,
-                        'general_location': state or '',
-                        'location': location or '',
                     },
                     'exists': False
                 })
@@ -88,8 +82,6 @@ def register_sheets_routes(app):
                     'success': True,
                     'data': {
                         'id': primary_id,  # Use the provided primary_id
-                        'general_location': state or '',
-                        'location': location or '',
                     },
                     'exists': False
                 })

@@ -125,24 +125,19 @@ export default function AdminTurtleMatchPage() {
           setPrimaryId(turtleId);
           setSheetsData({
             id: turtleId,
-            general_location: matchState || '',
-            location: matchLocationSpecific || '',
+            // Do not pre-fill general_location or location from match – user fills these
           });
         }
       } else {
         setPrimaryId(turtleId);
         setSheetsData({
           id: turtleId,
-          general_location: matchState || '',
-          location: matchLocationSpecific || '',
         });
       }
     } catch {
       setPrimaryId(turtleId);
       setSheetsData({
         id: turtleId,
-        general_location: matchState || '',
-        location: matchLocationSpecific || '',
       });
     } finally {
       setLoadingTurtleData(false);
@@ -339,8 +334,8 @@ export default function AdminTurtleMatchPage() {
             turtle_data: {
               ...effectiveSheetsData,
               primary_id: finalPrimaryId,
-              general_location: turtleState,
-              location: turtleLocation,
+              general_location: effectiveSheetsData?.general_location ?? '',
+              location: effectiveSheetsData?.location ?? '',
             },
           });
           if (result.success) {

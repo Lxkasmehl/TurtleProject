@@ -28,6 +28,7 @@ import {
   IconList,
   IconTrash,
   IconMapPin,
+  IconPlus,
 } from '@tabler/icons-react';
 import { useEffect, useState, useRef } from 'react';
 import { useUser } from '../hooks/useUser';
@@ -40,6 +41,8 @@ import {
   getTurtleSheetsData,
   type ReviewQueueItem,
   updateTurtleSheetsData,
+  createTurtleSheetsData,
+  generatePrimaryId,
   listAllTurtlesFromSheets,
   listSheets,
   type TurtleSheetsData,
@@ -70,6 +73,11 @@ export default function AdminTurtleRecordsPage() {
   const [itemToDelete, setItemToDelete] = useState<ReviewQueueItem | null>(null);
   const [deleting, setDeleting] = useState(false);
   const sheetsFormRef = useRef<TurtleSheetsDataFormRef>(null);
+  // Create new turtle (review queue)
+  const [showNewTurtleModal, setShowNewTurtleModal] = useState(false);
+  const [newTurtlePrimaryId, setNewTurtlePrimaryId] = useState<string | null>(null);
+  const [newTurtleSheetsData, setNewTurtleSheetsData] = useState<TurtleSheetsData | null>(null);
+  const [newTurtleSheetName, setNewTurtleSheetName] = useState('');
   // Google Sheets Browser State
   const [allTurtles, setAllTurtles] = useState<TurtleSheetsData[]>([]);
   const [turtlesLoading, setTurtlesLoading] = useState(false);
@@ -245,24 +253,19 @@ export default function AdminTurtleRecordsPage() {
           setPrimaryId(candidateId);
           setSheetsData({
             id: candidateId,
-            general_location: matchState || '',
-            location: matchLocation || '',
+            // Do not pre-fill general_location or location from match – admin fills these; community location is shown as hint only
           });
         }
       } else {
         setPrimaryId(candidateId);
         setSheetsData({
           id: candidateId,
-          general_location: matchState || '',
-          location: matchLocation || '',
         });
       }
     } catch {
       setPrimaryId(candidateId);
       setSheetsData({
         id: candidateId,
-        general_location: matchState || '',
-        location: matchLocation || '',
       });
     } finally {
       setLoadingTurtleData(false);
@@ -352,6 +355,119 @@ export default function AdminTurtleRecordsPage() {
     if (sheetsFormRef.current) {
       await sheetsFormRef.current.submit();
     }
+  };
+
+  const handleCreateNewTurtle = () => {
+    setShowNewTurtleModal(true);
+    setNewTurtlePrimaryId(null);
+    setNewTurtleSheetsData(null);
+    setNewTurtleSheetName('');
+  };
+
+  const handleConfirmNewTurtle = async (
+    sheetNameOverride?: string,
+    sheetsDataOverride?: TurtleSheetsData,
+  ) => {
+    if (!selectedItem) return;
+    const effectiveSheetName = sheetNameOverride || newTurtleSheetName;
+    const effectiveSheetsData = sheetsDataOverride || newTurtleSheetsData;
+    if (!effectiveSheetName) {
+      notifications.show({ title: 'Error', message: 'Please select a sheet for the new turtle', color: 'red' });
+      return;
+    }
+    setProcessing(selectedItem.request_id);
+    try {
+      const formState = effectiveSheetsData?.general_location || '';
+      const formLocation = effectiveSheetsData?.location || '';
+      const finalLocation = formState && formLocation ? `${formState}/${formLocation}` : effectiveSheetName;
+      const locationParts = finalLocation.split('/');
+      const turtleState = locationParts[0] || '';
+      const turtleLocation = locationParts.slice(1).join('/') || '';
+      let finalPrimaryId = newTurtlePrimaryId;
+      if (!finalPrimaryId) {
+        try {
+          const primaryIdResponse = await generatePrimaryId({ state: turtleState, location: turtleLocation });
+          if (primaryIdResponse.success && primaryIdResponse.primary_id) {
+            finalPrimaryId = primaryIdResponse.primary_id;
+            setNewTurtlePrimaryId(finalPrimaryId);
+          }
+        } catch (error) {
+          console.error('Error generating primary ID:', error);
+        }
+      }
+      let sheetsDataCreated = false;
+      if (effectiveSheetsData && finalPrimaryId && effectiveSheetName) {
+        try {
+          const result = await createTurtleSheetsData({
+            sheet_name: effectiveSheetName,
+            state: turtleState,
+            location: turtleLocation,
+            turtle_data: {
+              ...effectiveSheetsData,
+              primary_id: finalPrimaryId,
+              general_location: effectiveSheetsData?.general_location ?? '',
+              location: effectiveSheetsData?.location ?? '',
+            },
+          });
+          sheetsDataCreated = result.success ?? false;
+        } catch {
+          notifications.show({
+            title: 'Warning',
+            message: 'Failed to create turtle in Google Sheets. Backend will create it as fallback.',
+            color: 'yellow',
+          });
+        }
+      }
+      const turtleIdForReview = finalPrimaryId || `T${Date.now()}`;
+      await approveReview(selectedItem.request_id, {
+        new_location: finalLocation,
+        new_turtle_id: turtleIdForReview,
+        uploaded_image_path: selectedItem.uploaded_image,
+        sheets_data: effectiveSheetsData
+          ? {
+              ...effectiveSheetsData,
+              sheet_name: effectiveSheetName,
+              primary_id: sheetsDataCreated ? (finalPrimaryId ?? undefined) : undefined,
+            }
+          : undefined,
+      });
+      notifications.show({ title: 'Success!', message: 'New turtle created successfully', color: 'green', icon: <IconCheck size={18} /> });
+      setShowNewTurtleModal(false);
+      setQueueItems((prev) => prev.filter((i) => i.request_id !== selectedItem.request_id));
+      setSelectedItem(null);
+      setSelectedCandidate(null);
+      setSheetsData(null);
+      setPrimaryId(null);
+    } catch (error) {
+      notifications.show({
+        title: 'Error',
+        message: error instanceof Error ? error.message : 'Failed to create new turtle',
+        color: 'red',
+      });
+      throw error;
+    } finally {
+      setProcessing(null);
+    }
+  };
+
+  const handleSaveNewTurtleSheetsData = async (data: TurtleSheetsData, sheetName: string) => {
+    setNewTurtleSheetsData(data);
+    setNewTurtleSheetName(sheetName);
+    const state = data.general_location || '';
+    const location = data.location || '';
+    let primaryId = newTurtlePrimaryId;
+    if (!primaryId) {
+      try {
+        const primaryIdResponse = await generatePrimaryId({ state, location });
+        if (primaryIdResponse.success && primaryIdResponse.primary_id) {
+          primaryId = primaryIdResponse.primary_id;
+          setNewTurtlePrimaryId(primaryId);
+        }
+      } catch (error) {
+        console.error('Error generating primary ID:', error);
+      }
+    }
+    await handleConfirmNewTurtle(sheetName, data);
   };
 
   const handleOpenDeleteModal = (item: ReviewQueueItem, e: React.MouseEvent) => {
@@ -595,6 +711,7 @@ export default function AdminTurtleRecordsPage() {
                               sheetName={sheetsData?.sheet_name}
                               state={state}
                               location={location}
+                              hintLocationFromCommunity={state && location ? `${state} / ${location}` : (state || location) || undefined}
                               primaryId={primaryId || undefined}
                               mode={sheetsData ? 'edit' : 'create'}
                               onSave={handleSaveSheetsData}
@@ -602,7 +719,15 @@ export default function AdminTurtleRecordsPage() {
                               onCombinedSubmit={handleSaveAndApprove}
                             />
                           </ScrollArea>
-                          <Group justify='flex-end' gap='md' mt='md'>
+                          <Group justify='space-between' gap='md' mt='md'>
+                            <Button
+                              variant='subtle'
+                              leftSection={<IconPlus size={16} />}
+                              onClick={handleCreateNewTurtle}
+                              disabled={!!processing}
+                            >
+                              Create New Turtle Instead
+                            </Button>
                             <Button
                               onClick={handleCombinedButtonClick}
                               loading={processing === selectedItem.request_id}
@@ -617,9 +742,21 @@ export default function AdminTurtleRecordsPage() {
                     ) : (
                       <Paper shadow='sm' p='xl' radius='md' withBorder>
                         <Center py='xl'>
-                          <Text size='sm' c='dimmed' ta='center'>
-                            Select one of the top 5 matches above to view and edit its Google Sheets data
-                          </Text>
+                          <Stack gap='md' align='center'>
+                            <Text size='sm' c='dimmed' ta='center'>
+                              Select one of the top 5 matches above to view and edit its Google Sheets data
+                            </Text>
+                            <Text size='sm' c='dimmed' ta='center'>
+                              Or create a new turtle entry if none of the matches are suitable
+                            </Text>
+                            <Button
+                              leftSection={<IconPlus size={16} />}
+                              onClick={handleCreateNewTurtle}
+                              variant='light'
+                            >
+                              Create New Turtle
+                            </Button>
+                          </Stack>
                         </Center>
                       </Paper>
                     )}
@@ -875,6 +1012,42 @@ export default function AdminTurtleRecordsPage() {
           </Tabs.Panel>
         </Tabs>
       </Stack>
+
+      {/* Create New Turtle Modal (Review Queue) */}
+      <Modal
+        opened={showNewTurtleModal}
+        onClose={() => setShowNewTurtleModal(false)}
+        title='Create New Turtle'
+        size='xl'
+        centered
+      >
+        <Stack gap='md'>
+          <Text size='sm' c='dimmed'>
+            Create a new turtle entry for this upload. Select a sheet and fill in the turtle data below.
+            Primary ID will be automatically generated. ID and ID2 can be entered manually if needed.
+          </Text>
+          {newTurtlePrimaryId && (
+            <Paper p='sm' withBorder>
+              <Text size='sm' c='dimmed'>Primary ID</Text>
+              <Text fw={500}>{newTurtlePrimaryId}</Text>
+            </Paper>
+          )}
+          <Divider label='Google Sheets Data' labelPosition='center' />
+          <TurtleSheetsDataForm
+            initialData={newTurtleSheetsData || undefined}
+            sheetName={newTurtleSheetName}
+            hintLocationFromCommunity={
+              selectedItem?.metadata?.state && selectedItem?.metadata?.location
+                ? `${selectedItem.metadata.state} / ${selectedItem.metadata.location}`
+                : selectedItem?.metadata?.state || selectedItem?.metadata?.location || undefined
+            }
+            primaryId={newTurtlePrimaryId || undefined}
+            mode='create'
+            onSave={handleSaveNewTurtleSheetsData}
+            onCancel={() => setShowNewTurtleModal(false)}
+          />
+        </Stack>
+      </Modal>
     </Container>
   );
 }
