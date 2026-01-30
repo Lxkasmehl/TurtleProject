@@ -12,7 +12,7 @@ test.describe('Photo Upload', () => {
     await grantLocationPermission(page);
   });
 
-  test('Admin: Datei wählen und Upload starten führt zur Match-Seite', async ({
+  test('Admin: selecting file and starting upload leads to match page', async ({
     page,
   }) => {
     test.setTimeout(60_000);
@@ -34,7 +34,7 @@ test.describe('Photo Upload', () => {
     });
   });
 
-  test('Upload zeigt Fortschritt (uploading oder location)', async ({ page }) => {
+  test('Upload shows progress (uploading or location)', async ({ page }) => {
     test.setTimeout(60_000);
     await loginAsAdmin(page);
 

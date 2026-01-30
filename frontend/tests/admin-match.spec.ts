@@ -13,7 +13,7 @@ test.describe('Admin Turtle Match', () => {
     await grantLocationPermission(page);
   });
 
-  test('Nach Upload: Match-Seite mit Header und Back-Button', async ({ page }) => {
+  test('After upload: match page shows header and Back button', async ({ page }) => {
     test.setTimeout(60_000);
     await loginAsAdmin(page);
 
@@ -33,7 +33,7 @@ test.describe('Admin Turtle Match', () => {
     await expect(page.getByRole('button', { name: 'Back' })).toBeVisible();
   });
 
-  test('Back-Button führt zur Home', async ({ page }) => {
+  test('Back button navigates to home', async ({ page }) => {
     test.setTimeout(60_000);
     await loginAsAdmin(page);
 
@@ -54,7 +54,7 @@ test.describe('Admin Turtle Match', () => {
     await expect(page).toHaveURL('/');
   });
 
-  test('Create New Turtle öffnet Modal mit Formular', async ({ page }) => {
+  test('Create New Turtle opens modal with form', async ({ page }) => {
     test.setTimeout(60_000);
     await loginAsAdmin(page);
 
@@ -77,7 +77,7 @@ test.describe('Admin Turtle Match', () => {
     await expect(page.getByRole('dialog').getByLabel('Sheet / Location')).toBeVisible();
   });
 
-  test('Community kann Match-Seite nicht aufrufen', async ({ page }) => {
+  test('Community cannot access match page', async ({ page }) => {
     await loginAsCommunity(page);
     await page.goto('/admin/turtle-match/any-id');
     await expect(page).toHaveURL('/');

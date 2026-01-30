@@ -1,16 +1,16 @@
 import { test, expect } from '@playwright/test';
 import { openMobileMenu, navClick } from './fixtures';
 
-test.describe('Navigation (öffentlich)', () => {
+test.describe('Navigation (public)', () => {
   test.beforeEach(async ({ page }) => {
     await page.goto('/');
   });
 
-  test('Startseite zeigt Photo Upload', async ({ page }) => {
+  test('Home page shows Photo Upload', async ({ page }) => {
     await expect(page.getByRole('heading', { name: 'Photo Upload' })).toBeVisible();
   });
 
-  test('Über alle öffentlichen Seiten navigieren', async ({ page }) => {
+  test('Navigate across all public pages', async ({ page }) => {
     await navClick(page, 'About');
     await expect(page).toHaveURL('/about');
     await expect(
@@ -29,7 +29,7 @@ test.describe('Navigation (öffentlich)', () => {
     await expect(page).toHaveURL('/');
   });
 
-  test('Mobile: Burger-Menü und About', async ({ page }) => {
+  test('Mobile: burger menu and About', async ({ page }) => {
     await page.setViewportSize({ width: 375, height: 667 });
     await openMobileMenu(page);
     await page.getByRole('button', { name: 'About' }).click();

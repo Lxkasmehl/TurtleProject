@@ -2,28 +2,26 @@ import { test, expect } from '@playwright/test';
 import { loginAsAdmin, loginAsCommunity, navClick, openMobileMenu } from './fixtures';
 
 test.describe('Admin Turtle Records (Review Queue)', () => {
-  test('Admin sieht Turtle Records in der Nav', async ({ page }) => {
+  test('Admin sees Turtle Records in nav', async ({ page }) => {
     await loginAsAdmin(page);
     await openMobileMenu(page);
     await expect(page.getByRole('button', { name: 'Turtle Records' })).toBeVisible();
   });
 
-  test('Community sieht Turtle Records nicht', async ({ page }) => {
+  test('Community does not see Turtle Records', async ({ page }) => {
     await loginAsCommunity(page);
     await openMobileMenu(page);
     await expect(page.getByRole('button', { name: 'Turtle Records' })).not.toBeVisible();
   });
 
-  test('Turtle Records öffnet Review Queue', async ({ page }) => {
+  test('Turtle Records opens Review Queue', async ({ page }) => {
     await loginAsAdmin(page);
     await navClick(page, 'Turtle Records');
     await expect(page).toHaveURL('/admin/turtle-records');
     await expect(page.getByRole('tab', { name: /Review Queue/ })).toBeVisible();
   });
 
-  test('Leere Queue: "No pending reviews" oder Pending-Badge sichtbar', async ({
-    page,
-  }) => {
+  test('Empty queue: "No pending reviews" or Pending badge visible', async ({ page }) => {
     await page.route('**/api/review-queue', async (route) => {
       await route.fulfill({
         status: 200,
@@ -41,7 +39,7 @@ test.describe('Admin Turtle Records (Review Queue)', () => {
     await expect(emptyOrBadge).toBeVisible({ timeout: 5000 });
   });
 
-  test('Review-Button öffnet Modal wenn Einträge da', async ({ page }) => {
+  test('Review button opens modal when entries exist', async ({ page }) => {
     await loginAsAdmin(page);
     await navClick(page, 'Turtle Records');
     await expect(page.getByRole('tab', { name: /Review Queue/ })).toBeVisible();

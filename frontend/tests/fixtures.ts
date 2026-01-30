@@ -7,19 +7,19 @@ const ADMIN_PASSWORD = process.env.E2E_ADMIN_PASSWORD ?? 'testpassword123';
 const COMMUNITY_EMAIL = process.env.E2E_COMMUNITY_EMAIL ?? 'community@test.com';
 const COMMUNITY_PASSWORD = process.env.E2E_COMMUNITY_PASSWORD ?? 'testpassword123';
 
-/** Öffnet das Mobile-Menü (Burger), falls sichtbar. */
+/** Opens the mobile menu (burger), if visible. */
 export async function openMobileMenu(page: Page): Promise<void> {
   const burger = page.getByTestId('mobile-menu-button');
   if (await burger.isVisible()) await burger.click();
 }
 
-/** Klickt in der Nav auf einen Link (Name des Buttons). */
+/** Clicks a nav link by button label. */
 export async function navClick(page: Page, label: string): Promise<void> {
   await openMobileMenu(page);
   await page.getByRole('button', { name: label }).click();
 }
 
-/** Login als Admin (E-Mail/Passwort, wartet auf Home + Role-Badge). */
+/** Login as admin (email/password, waits for home + role badge). */
 export async function loginAsAdmin(page: Page): Promise<void> {
   await page.goto('/login');
   await page.getByLabel('Email').fill(ADMIN_EMAIL);
@@ -29,7 +29,7 @@ export async function loginAsAdmin(page: Page): Promise<void> {
   await expect(page.getByTestId('role-badge')).toHaveText(/Admin/);
 }
 
-/** Login als Community-User. */
+/** Login as community user. */
 export async function loginAsCommunity(page: Page): Promise<void> {
   await page.goto('/login');
   await page.getByLabel('Email').fill(COMMUNITY_EMAIL);
@@ -39,7 +39,7 @@ export async function loginAsCommunity(page: Page): Promise<void> {
   await expect(page.getByTestId('role-badge')).toHaveText(/Community/);
 }
 
-/** Setzt Geo-Permission und mockt getCurrentPosition, damit keine Browser-Dialoge erscheinen. */
+/** Grants geo permission and mocks getCurrentPosition so no browser dialogs appear. */
 export async function grantLocationPermission(page: Page): Promise<void> {
   const url = page.url();
   const origin =
@@ -77,7 +77,7 @@ export async function grantLocationPermission(page: Page): Promise<void> {
   });
 }
 
-/** Erzeugt ein kleines PNG als Base64 (für setInputFiles mit Buffer). */
+/** Creates a small PNG as Base64 (for setInputFiles with Buffer). */
 export function createTestImageBase64(): string {
   return (
     'data:image/png;base64,' +
@@ -85,12 +85,12 @@ export function createTestImageBase64(): string {
   );
 }
 
-/** Buffer eines minimalen PNG für setInputFiles. */
+/** Buffer of a minimal PNG for setInputFiles. */
 export function getTestImageBuffer(): Buffer {
   return Buffer.from(createTestImageBase64().split(',')[1], 'base64');
 }
 
-/** Klickt den Upload-Button auf der Preview-Card (nicht den Datei-Button). */
+/** Clicks the Upload button on the preview card (not the file button). */
 export async function clickUploadPhotoButton(page: Page): Promise<void> {
   await page.locator('button[data-size="md"]:has-text("Upload Photo")').click();
 }
