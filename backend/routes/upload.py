@@ -59,8 +59,8 @@ def register_upload_routes(app):
                 return jsonify({'error': 'No file provided'}), 400
             
             # Get user data from verified JWT token (if provided)
-            user_data = request.user
-            if user_data:
+            user_data = getattr(request, 'user', None)
+            if user_data and isinstance(user_data, dict):
                 user_role = user_data.get('role', 'community')
                 user_email = user_data.get('email', 'anonymous')
             else:
@@ -103,7 +103,8 @@ def register_upload_routes(app):
                 # match_sheet: sheet name from Google Sheets (e.g. "Location A"); empty = test against all
                 match_sheet = (request.form.get('match_sheet') or '').strip() or None
                 matches = manager.search_for_matches(temp_path, sheet_name=match_sheet)
-                
+                if matches is None:
+                    matches = []
                 # Format matches for frontend
                 formatted_matches = []
                 for match in matches:
@@ -172,13 +173,18 @@ def register_upload_routes(app):
         
         except Exception as e:
             error_trace = traceback.format_exc()
+            err_msg = str(e)
+            import sys
+            # Force unbuffered error output so it appears in the terminal
+            sys.stderr.write(f"Upload error: {err_msg}\n")
+            sys.stderr.write(error_trace)
+            sys.stderr.flush()
             try:
-                print(f"❌ Error processing upload: {str(e)}")
-            except UnicodeEncodeError:
-                print(f"[ERROR] Error processing upload: {str(e)}")
-            print(f"Traceback:\n{error_trace}")
+                print(f"❌ Error processing upload: {err_msg}", flush=True)
+            except Exception:
+                pass
             return jsonify({
-                'error': f'Processing failed: {str(e)}',
+                'error': f'Processing failed: {err_msg}',
                 'details': error_trace if app.debug else None
             }), 500
         

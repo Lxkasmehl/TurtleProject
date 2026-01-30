@@ -63,17 +63,16 @@ def optional_auth(f):
     """Decorator to make authentication optional"""
     @wraps(f)
     def decorated_function(*args, **kwargs):
+        request.user = None
         auth_header = request.headers.get('Authorization')
         if auth_header:
-            success, user_data, error = verify_jwt_token(auth_header)
-            if success:
-                request.user = user_data
-            else:
-                # Invalid token, treat as anonymous
+            try:
+                success, user_data, error = verify_jwt_token(auth_header)
+                if success and user_data is not None:
+                    request.user = user_data
+            except Exception:
+                # Any token error: treat as anonymous
                 request.user = None
-        else:
-            # No token provided, treat as anonymous
-            request.user = None
         return f(*args, **kwargs)
     return decorated_function
 

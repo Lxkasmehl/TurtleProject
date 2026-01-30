@@ -16,7 +16,7 @@ import {
   ScrollArea,
   Modal,
 } from '@mantine/core';
-import { IconPhoto, IconCheck, IconArrowLeft, IconPlus} from '@tabler/icons-react';
+import { IconPhoto, IconCheck, IconArrowLeft, IconPlus } from '@tabler/icons-react';
 import { useEffect, useState, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useUser } from '../hooks/useUser';
@@ -31,7 +31,10 @@ import {
   type TurtleSheetsData,
 } from '../services/api';
 import { notifications } from '@mantine/notifications';
-import { TurtleSheetsDataForm, type TurtleSheetsDataFormRef } from '../components/TurtleSheetsDataForm';
+import {
+  TurtleSheetsDataForm,
+  type TurtleSheetsDataFormRef,
+} from '../components/TurtleSheetsDataForm';
 
 interface MatchData {
   request_id: string;
@@ -51,7 +54,9 @@ export default function AdminTurtleMatchPage() {
   const [primaryId, setPrimaryId] = useState<string | null>(null);
   const [showNewTurtleModal, setShowNewTurtleModal] = useState(false);
   const [newTurtlePrimaryId, setNewTurtlePrimaryId] = useState<string | null>(null);
-  const [newTurtleSheetsData, setNewTurtleSheetsData] = useState<TurtleSheetsData | null>(null);
+  const [newTurtleSheetsData, setNewTurtleSheetsData] = useState<TurtleSheetsData | null>(
+    null,
+  );
   const [newTurtleSheetName, setNewTurtleSheetName] = useState('');
   const [loadingTurtleData, setLoadingTurtleData] = useState(false);
   const formRef = useRef<TurtleSheetsDataFormRef>(null);
@@ -86,29 +91,39 @@ export default function AdminTurtleMatchPage() {
   const handleSelectMatch = async (turtleId: string) => {
     setSelectedMatch(turtleId);
     setLoadingTurtleData(true);
-    
+
     // Get match data to extract location for sheet name
     const match = matchData?.matches.find((m) => m.turtle_id === turtleId);
     const matchLocation = match?.location || '';
     const locationParts = matchLocation.split('/');
     const matchState = locationParts[0] || '';
     const matchLocationSpecific = locationParts.slice(1).join('/') || '';
-    
+
     try {
       // First try without sheet name (backend will auto-find)
       let response = await getTurtleSheetsData(turtleId);
-      
+
       // If auto-find failed and we have a match location, try with sheet name
-      if (!response.exists && matchState && (!response.data || Object.keys(response.data).length <= 3)) {
+      if (
+        !response.exists &&
+        matchState &&
+        (!response.data || Object.keys(response.data).length <= 3)
+      ) {
         try {
-          response = await getTurtleSheetsData(turtleId, matchState, matchState, matchLocationSpecific);
+          response = await getTurtleSheetsData(
+            turtleId,
+            matchState,
+            matchState,
+            matchLocationSpecific,
+          );
         } catch {
           // Ignore, use first response
         }
       }
-      
+
       if (response.success && response.data) {
-        const hasRealData = response.exists || (
+        const hasRealData =
+          response.exists ||
           response.data.name ||
           response.data.species ||
           response.data.sex ||
@@ -116,9 +131,8 @@ export default function AdminTurtleMatchPage() {
           response.data.sheet_name ||
           response.data.date_1st_found ||
           response.data.notes ||
-          Object.keys(response.data).length > 3
-        );
-        
+          Object.keys(response.data).length > 3;
+
         if (hasRealData) {
           setSheetsData(response.data);
           setPrimaryId(response.data.primary_id || turtleId);
@@ -228,15 +242,18 @@ export default function AdminTurtleMatchPage() {
     setNewTurtleSheetName('');
   };
 
-  const handleSaveNewTurtleSheetsData = async (data: TurtleSheetsData, sheetName: string) => {
+  const handleSaveNewTurtleSheetsData = async (
+    data: TurtleSheetsData,
+    sheetName: string,
+  ) => {
     // Save the sheets data to state (for UI display)
     setNewTurtleSheetsData(data);
     setNewTurtleSheetName(sheetName);
-    
+
     // Extract state and location from form data
     const state = data.general_location || '';
     const location = data.location || '';
-    
+
     // Generate primary ID if not already generated
     let primaryId = newTurtlePrimaryId;
     if (!primaryId) {
@@ -253,7 +270,7 @@ export default function AdminTurtleMatchPage() {
         console.error('Error generating primary ID:', error);
       }
     }
-    
+
     // Automatically confirm and create the turtle after saving the form data
     // Pass data and sheetName directly to avoid React state update timing issues
     // This avoids having two buttons (one in form, one outside)
@@ -267,7 +284,7 @@ export default function AdminTurtleMatchPage() {
     // Use provided values or fall back to state
     const effectiveSheetName = sheetNameOverride || newTurtleSheetName;
     const effectiveSheetsData = sheetsDataOverride || newTurtleSheetsData;
-    
+
     if (!effectiveSheetName) {
       notifications.show({
         title: 'Error',
@@ -300,7 +317,8 @@ export default function AdminTurtleMatchPage() {
       // Extract state and location from form data
       const formState = effectiveSheetsData?.general_location || '';
       const formLocation = effectiveSheetsData?.location || '';
-      const finalLocation = formState && formLocation ? `${formState}/${formLocation}` : effectiveSheetName;
+      const finalLocation =
+        formState && formLocation ? `${formState}/${formLocation}` : effectiveSheetName;
 
       const locationParts = finalLocation.split('/');
       const turtleState = locationParts[0] || '';
@@ -349,7 +367,8 @@ export default function AdminTurtleMatchPage() {
           // Show error to user but continue - backend will create it as fallback
           notifications.show({
             title: 'Warning',
-            message: 'Failed to create turtle in Google Sheets. Backend will create it as fallback.',
+            message:
+              'Failed to create turtle in Google Sheets. Backend will create it as fallback.',
             color: 'yellow',
           });
           sheetsDataCreated = false;
@@ -360,18 +379,22 @@ export default function AdminTurtleMatchPage() {
       // Note: We already created the Sheets entry above, so approveReview should skip creating it
       // Use primary ID as turtle ID, or fallback to generated ID
       const turtleIdForReview = finalPrimaryId || `T${Date.now()}`;
-      
+
       await approveReview(imageId, {
         new_location: finalLocation,
         new_turtle_id: turtleIdForReview,
         uploaded_image_path: matchData.uploaded_image_path,
-        sheets_data: effectiveSheetsData ? {
-          ...effectiveSheetsData,
-          sheet_name: effectiveSheetName, // Use the effective sheet name
-          // Only include primary_id if sheets data was successfully created by frontend
-          // Otherwise, let backend create it in fallback mode
-          primary_id: sheetsDataCreated ? (finalPrimaryId ?? undefined) as string | undefined : undefined,
-        } : undefined,
+        sheets_data: effectiveSheetsData
+          ? {
+              ...effectiveSheetsData,
+              sheet_name: effectiveSheetName, // Use the effective sheet name
+              // Only include primary_id if sheets data was successfully created by frontend
+              // Otherwise, let backend create it in fallback mode
+              primary_id: sheetsDataCreated
+                ? ((finalPrimaryId ?? undefined) as string | undefined)
+                : undefined,
+            }
+          : undefined,
       });
 
       localStorage.removeItem(`match_${imageId}`);
@@ -385,7 +408,7 @@ export default function AdminTurtleMatchPage() {
 
       // Close the modal after successful creation
       setShowNewTurtleModal(false);
-      
+
       navigate('/');
     } catch (error) {
       notifications.show({
@@ -473,7 +496,9 @@ export default function AdminTurtleMatchPage() {
                 {/* Uploaded Image */}
                 <Paper shadow='sm' p='md' radius='md' withBorder>
                   <Stack gap='sm'>
-                    <Text fw={500} size='lg'>Uploaded Photo</Text>
+                    <Text fw={500} size='lg'>
+                      Uploaded Photo
+                    </Text>
                     <Image
                       src={
                         matchData.uploaded_image_path
@@ -516,7 +541,9 @@ export default function AdminTurtleMatchPage() {
                             <Stack gap='xs'>
                               <Group justify='space-between'>
                                 <Badge
-                                  color={selectedMatch === match.turtle_id ? 'blue' : 'gray'}
+                                  color={
+                                    selectedMatch === match.turtle_id ? 'blue' : 'gray'
+                                  }
                                   size='lg'
                                 >
                                   Rank {index + 1}
@@ -587,26 +614,36 @@ export default function AdminTurtleMatchPage() {
                           Selected Match
                         </Text>
                         <Badge color='blue' size='lg'>
-                          {matchData.matches.findIndex((m) => m.turtle_id === selectedMatch) + 1}
+                          {matchData.matches.findIndex(
+                            (m) => m.turtle_id === selectedMatch,
+                          ) + 1}
                         </Badge>
                       </Group>
                       <Divider />
                       <Grid>
                         <Grid.Col span={6}>
-                          <Text size='sm' c='dimmed'>Turtle ID</Text>
+                          <Text size='sm' c='dimmed'>
+                            Turtle ID
+                          </Text>
                           <Text fw={500}>{selectedMatch}</Text>
                         </Grid.Col>
                         <Grid.Col span={6}>
-                          <Text size='sm' c='dimmed'>Location</Text>
+                          <Text size='sm' c='dimmed'>
+                            Location
+                          </Text>
                           <Text fw={500}>{selectedMatchData.location}</Text>
                         </Grid.Col>
                         <Grid.Col span={6}>
-                          <Text size='sm' c='dimmed'>Distance</Text>
+                          <Text size='sm' c='dimmed'>
+                            Distance
+                          </Text>
                           <Text fw={500}>{selectedMatchData.distance.toFixed(4)}</Text>
                         </Grid.Col>
                         {primaryId && (
                           <Grid.Col span={6}>
-                            <Text size='sm' c='dimmed'>Primary ID</Text>
+                            <Text size='sm' c='dimmed'>
+                              Primary ID
+                            </Text>
                             <Text fw={500}>{primaryId}</Text>
                           </Grid.Col>
                         )}
@@ -628,6 +665,7 @@ export default function AdminTurtleMatchPage() {
                         onSave={handleSaveSheetsData}
                         hideSubmitButton={true}
                         onCombinedSubmit={handleSaveAndConfirm}
+                        addOnlyMode={true}
                       />
                     </ScrollArea>
                   </Paper>
@@ -644,7 +682,11 @@ export default function AdminTurtleMatchPage() {
                         Create New Turtle Instead
                       </Button>
                       <Group gap='md'>
-                        <Button variant='light' onClick={() => navigate('/')} disabled={processing}>
+                        <Button
+                          variant='light'
+                          onClick={() => navigate('/')}
+                          disabled={processing}
+                        >
                           Cancel
                         </Button>
                         <Button
@@ -668,7 +710,8 @@ export default function AdminTurtleMatchPage() {
                         Select a match to view details
                       </Text>
                       <Text size='sm' c='dimmed' ta='center'>
-                        Click on any match from the list to see turtle data and Google Sheets information
+                        Click on any match from the list to see turtle data and Google
+                        Sheets information
                       </Text>
                       <Text size='sm' c='dimmed' ta='center' mt='md'>
                         Or create a new turtle entry if none of the matches are suitable
@@ -693,24 +736,27 @@ export default function AdminTurtleMatchPage() {
       <Modal
         opened={showNewTurtleModal}
         onClose={() => setShowNewTurtleModal(false)}
-        title="Create New Turtle"
-        size="xl"
+        title='Create New Turtle'
+        size='xl'
         centered
       >
-        <Stack gap="md">
-          <Text size="sm" c="dimmed">
-            Create a new turtle entry for this uploaded image. Select a sheet and fill in the turtle data below.
-            Primary ID will be automatically generated. ID and ID2 can be entered manually if needed.
+        <Stack gap='md'>
+          <Text size='sm' c='dimmed'>
+            Create a new turtle entry for this uploaded image. Select a sheet and fill in
+            the turtle data below. Primary ID will be automatically generated. ID and ID2
+            can be entered manually if needed.
           </Text>
 
           {newTurtlePrimaryId && (
-            <Paper p="sm" withBorder>
-              <Text size="sm" c="dimmed">Primary ID</Text>
+            <Paper p='sm' withBorder>
+              <Text size='sm' c='dimmed'>
+                Primary ID
+              </Text>
               <Text fw={500}>{newTurtlePrimaryId}</Text>
             </Paper>
           )}
 
-          <Divider label="Google Sheets Data" labelPosition="center" />
+          <Divider label='Google Sheets Data' labelPosition='center' />
 
           <TurtleSheetsDataForm
             initialData={newTurtleSheetsData || undefined}
@@ -718,7 +764,7 @@ export default function AdminTurtleMatchPage() {
             state={newTurtleSheetsData?.general_location || ''}
             location={newTurtleSheetsData?.location || ''}
             primaryId={newTurtlePrimaryId || undefined}
-            mode="create"
+            mode='create'
             onSave={handleSaveNewTurtleSheetsData}
             onCancel={() => setShowNewTurtleModal(false)}
           />

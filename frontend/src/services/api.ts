@@ -52,7 +52,7 @@ export const removeToken = (): void => {
 // Make authenticated API request to Auth Backend
 export const apiRequest = async (
   endpoint: string,
-  options: RequestInit = {}
+  options: RequestInit = {},
 ): Promise<Response> => {
   const token = getToken();
   const headers: Record<string, string> = {
@@ -272,7 +272,7 @@ export const uploadTurtlePhoto = async (
   /** Optional: coordinates as hint only (never stored in sheets) */
   locationHint?: LocationHint,
   /** Admin only: sheet name (location) to test against; '' or undefined = test against all locations */
-  matchSheet?: string
+  matchSheet?: string,
 ): Promise<UploadPhotoResponse> => {
   const formData = new FormData();
   formData.append('file', file);
@@ -314,7 +314,13 @@ export const uploadTurtlePhoto = async (
       throw new Error('Authentication failed. Please try again.');
     }
     const error = await response.json().catch(() => ({ error: 'Upload failed' }));
-    throw new Error(error.error || 'Upload failed');
+    const message = error.error || 'Upload failed';
+    // Include backend details in dev for debugging (e.g. 500 traceback)
+    const details = error.details as string | undefined;
+    if (details && import.meta.env.DEV) {
+      console.error('Upload error details:', details);
+    }
+    throw new Error(message);
   }
 
   return await response.json();
@@ -345,7 +351,7 @@ export const getReviewQueue = async (): Promise<ReviewQueueResponse> => {
 // Approve review item (Admin only)
 export const approveReview = async (
   requestId: string,
-  data: ApproveReviewRequest
+  data: ApproveReviewRequest,
 ): Promise<ApproveReviewResponse> => {
   const token = getToken();
   const headers: Record<string, string> = {
@@ -371,16 +377,21 @@ export const approveReview = async (
 };
 
 // Delete review queue item (Admin only) – no processing, removes packet
-export const deleteReviewItem = async (requestId: string): Promise<{ success: boolean; message: string }> => {
+export const deleteReviewItem = async (
+  requestId: string,
+): Promise<{ success: boolean; message: string }> => {
   const token = getToken();
   const headers: Record<string, string> = {};
   if (token) {
     headers['Authorization'] = `Bearer ${token}`;
   }
-  const response = await fetch(`${TURTLE_API_BASE_URL}/review/${encodeURIComponent(requestId)}`, {
-    method: 'DELETE',
-    headers,
-  });
+  const response = await fetch(
+    `${TURTLE_API_BASE_URL}/review/${encodeURIComponent(requestId)}`,
+    {
+      method: 'DELETE',
+      headers,
+    },
+  );
   if (!response.ok) {
     const error = await response.json().catch(() => ({ error: 'Failed to delete' }));
     throw new Error(error.error || 'Failed to delete review item');
@@ -487,7 +498,7 @@ export const getTurtleSheetsData = async (
   primaryId: string,
   sheetName?: string,
   state?: string,
-  location?: string
+  location?: string,
 ): Promise<GetTurtleSheetsDataResponse> => {
   const token = getToken();
   const headers: Record<string, string> = {};
@@ -512,7 +523,7 @@ export const getTurtleSheetsData = async (
     {
       method: 'GET',
       headers,
-    }
+    },
   );
 
   if (!response.ok) {
@@ -525,7 +536,7 @@ export const getTurtleSheetsData = async (
 
 // Create turtle data in Google Sheets
 export const createTurtleSheetsData = async (
-  data: CreateTurtleSheetsDataRequest
+  data: CreateTurtleSheetsDataRequest,
 ): Promise<CreateTurtleSheetsDataResponse> => {
   const token = getToken();
   const headers: Record<string, string> = {
@@ -553,7 +564,7 @@ export const createTurtleSheetsData = async (
 // Update turtle data in Google Sheets
 export const updateTurtleSheetsData = async (
   primaryId: string,
-  data: UpdateTurtleSheetsDataRequest
+  data: UpdateTurtleSheetsDataRequest,
 ): Promise<UpdateTurtleSheetsDataResponse> => {
   const token = getToken();
   const headers: Record<string, string> = {
@@ -581,7 +592,7 @@ export const updateTurtleSheetsData = async (
 // Generate a new primary ID
 export const generatePrimaryId = async (
   data: GeneratePrimaryIdRequest,
-  timeoutMs: number = 15000
+  timeoutMs: number = 15000,
 ): Promise<GeneratePrimaryIdResponse> => {
   const token = getToken();
   const headers: Record<string, string> = {
@@ -622,7 +633,9 @@ export const generatePrimaryId = async (
 };
 
 // List all available sheets
-export const listSheets = async (timeoutMs: number = 10000): Promise<ListSheetsResponse> => {
+export const listSheets = async (
+  timeoutMs: number = 10000,
+): Promise<ListSheetsResponse> => {
   const token = getToken();
   const headers: Record<string, string> = {};
 
@@ -670,7 +683,9 @@ export interface CreateSheetResponse {
   error?: string;
 }
 
-export const createSheet = async (data: CreateSheetRequest): Promise<CreateSheetResponse> => {
+export const createSheet = async (
+  data: CreateSheetRequest,
+): Promise<CreateSheetResponse> => {
   const token = getToken();
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
@@ -703,7 +718,7 @@ export interface ListTurtlesResponse {
 }
 
 export const listAllTurtlesFromSheets = async (
-  sheetName?: string
+  sheetName?: string,
 ): Promise<ListTurtlesResponse> => {
   const token = getToken();
   const headers: Record<string, string> = {};
@@ -722,7 +737,7 @@ export const listAllTurtlesFromSheets = async (
     {
       method: 'GET',
       headers,
-    }
+    },
   );
 
   if (!response.ok) {

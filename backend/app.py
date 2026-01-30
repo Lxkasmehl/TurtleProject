@@ -43,6 +43,20 @@ register_review_routes(app)
 register_image_routes(app)
 register_sheets_routes(app)
 
+
+@app.errorhandler(Exception)
+def handle_exception(err):
+    """Log unhandled exceptions and return JSON (works in debug mode too)."""
+    import traceback
+    tb = traceback.format_exc()
+    sys.stderr.write(f"Unhandled exception: {err}\n{tb}")
+    sys.stderr.flush()
+    return (
+        {'error': f'Server error: {str(err)}', 'details': tb if app.debug else None},
+        500,
+        {'Content-Type': 'application/json'},
+    )
+
 if __name__ == '__main__':
     # Determine if debug mode should be enabled
     # Disable debug mode for tests to avoid reload issues
