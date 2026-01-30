@@ -7,7 +7,6 @@ import {
   TextInput,
   Button,
   Alert,
-  Group,
   Loader,
   Center,
 } from '@mantine/core';
@@ -34,8 +33,8 @@ export default function AdminUserManagementPage() {
 
   if (!authChecked) {
     return (
-      <Center py="xl">
-        <Loader size="lg" />
+      <Center py='xl'>
+        <Loader size='lg' />
       </Center>
     );
   }
@@ -58,7 +57,8 @@ export default function AdminUserManagementPage() {
       });
       setEmail(''); // Clear form
     } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Failed to promote user to admin';
+      const errorMessage =
+        err instanceof Error ? err.message : 'Failed to promote user to admin';
       setError(errorMessage);
       notifications.show({
         title: 'Error',
@@ -72,14 +72,15 @@ export default function AdminUserManagementPage() {
   };
 
   return (
-    <Container size='sm' py='xl'>
-      <Paper shadow='sm' p='xl' radius='md' withBorder>
+    <Container size='sm' py={{ base: 'md', sm: 'xl' }} px={{ base: 'xs', sm: 'md' }}>
+      <Paper shadow='sm' p={{ base: 'md', sm: 'xl' }} radius='md' withBorder>
         <Stack gap='lg'>
           <div>
             <Title order={1}>User Management</Title>
             <Text size='sm' c='dimmed' mt='xs'>
-              Promote a user to admin by entering their email address. If the user doesn't have an
-              account yet, they will receive an invitation email with a registration link.
+              Promote a user to admin by entering their email address. If the user doesn't
+              have an account yet, they will receive an invitation email with a
+              registration link.
             </Text>
           </div>
 
@@ -119,13 +120,14 @@ export default function AdminUserManagementPage() {
 
           <Alert icon={<IconAlertCircle size={16} />} title='How it works' color='blue'>
             <Text size='sm'>
-              <strong>Existing users:</strong> If the user already has an account, they will be
-              promoted immediately and receive a notification email.
+              <strong>Existing users:</strong> If the user already has an account, they
+              will be promoted immediately and receive a notification email.
               <br />
               <br />
-              <strong>New users:</strong> If the user doesn't have an account yet, they will
-              receive an invitation email with a registration link. When they register using that
-              link, their account will be created with admin privileges.
+              <strong>New users:</strong> If the user doesn't have an account yet, they
+              will receive an invitation email with a registration link. When they
+              register using that link, their account will be created with admin
+              privileges.
             </Text>
           </Alert>
         </Stack>
@@ -133,4 +135,3 @@ export default function AdminUserManagementPage() {
     </Container>
   );
 }
-

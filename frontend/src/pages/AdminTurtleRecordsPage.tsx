@@ -31,6 +31,7 @@ import {
   IconPlus,
 } from '@tabler/icons-react';
 import { useEffect, useState, useRef } from 'react';
+import { useMediaQuery } from '@mantine/hooks';
 import { useUser } from '../hooks/useUser';
 import { useNavigate } from 'react-router-dom';
 import {
@@ -48,14 +49,17 @@ import {
   type TurtleSheetsData,
 } from '../services/api';
 import { notifications } from '@mantine/notifications';
-import { TurtleSheetsDataForm, type TurtleSheetsDataFormRef } from '../components/TurtleSheetsDataForm';
+import {
+  TurtleSheetsDataForm,
+  type TurtleSheetsDataFormRef,
+} from '../components/TurtleSheetsDataForm';
 import { MapDisplay } from '../components/MapDisplay';
 
 export default function AdminTurtleRecordsPage() {
   const { role, authChecked } = useUser();
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<string>('queue');
-  
+
   // Review Queue State
   const [queueItems, setQueueItems] = useState<ReviewQueueItem[]>([]);
   const [queueLoading, setQueueLoading] = useState(true);
@@ -68,7 +72,9 @@ export default function AdminTurtleRecordsPage() {
   /** Names for top-5 candidates (turtle_id -> name from Sheets), loaded when item is selected */
   const [candidateNames, setCandidateNames] = useState<Record<string, string>>({});
   /** Original turtle ID from sheet (turtle_id -> sheet's "id" field), not primary_id */
-  const [candidateOriginalIds, setCandidateOriginalIds] = useState<Record<string, string>>({});
+  const [candidateOriginalIds, setCandidateOriginalIds] = useState<
+    Record<string, string>
+  >({});
   const [loadingCandidateNames, setLoadingCandidateNames] = useState(false);
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [itemToDelete, setItemToDelete] = useState<ReviewQueueItem | null>(null);
@@ -77,13 +83,16 @@ export default function AdminTurtleRecordsPage() {
   // Create new turtle (review queue)
   const [showNewTurtleModal, setShowNewTurtleModal] = useState(false);
   const [newTurtlePrimaryId, setNewTurtlePrimaryId] = useState<string | null>(null);
-  const [newTurtleSheetsData, setNewTurtleSheetsData] = useState<TurtleSheetsData | null>(null);
+  const [newTurtleSheetsData, setNewTurtleSheetsData] = useState<TurtleSheetsData | null>(
+    null,
+  );
   const [newTurtleSheetName, setNewTurtleSheetName] = useState('');
   // Google Sheets Browser State
   const [allTurtles, setAllTurtles] = useState<TurtleSheetsData[]>([]);
   const [turtlesLoading, setTurtlesLoading] = useState(false);
   const [selectedTurtle, setSelectedTurtle] = useState<TurtleSheetsData | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
+  const isMobile = useMediaQuery('(max-width: 576px)');
   /** Filter by spreadsheet/location (sheet name). '' = all sheets */
   const [selectedSheetFilter, setSelectedSheetFilter] = useState<string>('');
   const [availableSheets, setAvailableSheets] = useState<string[]>([]);
@@ -190,9 +199,18 @@ export default function AdminTurtleRecordsPage() {
       item.candidates.map(async (c) => {
         try {
           let res = await getTurtleSheetsData(c.turtle_id);
-          if (!res.exists && matchState && (!res.data || Object.keys(res.data || {}).length <= 3)) {
+          if (
+            !res.exists &&
+            matchState &&
+            (!res.data || Object.keys(res.data || {}).length <= 3)
+          ) {
             try {
-              res = await getTurtleSheetsData(c.turtle_id, matchState, matchState, matchLocation);
+              res = await getTurtleSheetsData(
+                c.turtle_id,
+                matchState,
+                matchState,
+                matchLocation,
+              );
             } catch {
               // ignore
             }
@@ -204,14 +222,17 @@ export default function AdminTurtleRecordsPage() {
         } catch {
           // leave name/id empty
         }
-      })
+      }),
     );
     setCandidateNames(names);
     setCandidateOriginalIds(originalIds);
     setLoadingCandidateNames(false);
   };
 
-  const loadSheetsDataForCandidate = async (item: ReviewQueueItem, candidateId: string) => {
+  const loadSheetsDataForCandidate = async (
+    item: ReviewQueueItem,
+    candidateId: string,
+  ) => {
     setLoadingTurtleData(true);
 
     const matchState = item.metadata.state || '';
@@ -220,9 +241,18 @@ export default function AdminTurtleRecordsPage() {
     try {
       let response = await getTurtleSheetsData(candidateId);
 
-      if (!response.exists && matchState && (!response.data || Object.keys(response.data).length <= 3)) {
+      if (
+        !response.exists &&
+        matchState &&
+        (!response.data || Object.keys(response.data).length <= 3)
+      ) {
         try {
-          response = await getTurtleSheetsData(candidateId, matchState, matchState, matchLocation);
+          response = await getTurtleSheetsData(
+            candidateId,
+            matchState,
+            matchState,
+            matchLocation,
+          );
         } catch {
           // Ignore, use first response
         }
@@ -246,10 +276,16 @@ export default function AdminTurtleRecordsPage() {
           setSheetsData(response.data);
           setPrimaryId(response.data.primary_id || candidateId);
           if (response.data.name) {
-            setCandidateNames((prev) => ({ ...prev, [candidateId]: response.data!.name! }));
+            setCandidateNames((prev) => ({
+              ...prev,
+              [candidateId]: response.data!.name!,
+            }));
           }
           if (response.data.id) {
-            setCandidateOriginalIds((prev) => ({ ...prev, [candidateId]: response.data!.id! }));
+            setCandidateOriginalIds((prev) => ({
+              ...prev,
+              [candidateId]: response.data!.id!,
+            }));
           }
         } else {
           setPrimaryId(candidateId);
@@ -274,7 +310,6 @@ export default function AdminTurtleRecordsPage() {
     }
   };
 
-
   const handleSaveSheetsData = async (data: TurtleSheetsData, sheetName: string) => {
     if (!selectedItem || !selectedCandidate) {
       throw new Error('No turtle selected');
@@ -294,7 +329,10 @@ export default function AdminTurtleRecordsPage() {
     setSheetsData(data);
   };
 
-  const handleSaveTurtleFromBrowser = async (data: TurtleSheetsData, sheetName: string) => {
+  const handleSaveTurtleFromBrowser = async (
+    data: TurtleSheetsData,
+    sheetName: string,
+  ) => {
     if (!selectedTurtle) {
       throw new Error('No turtle selected');
     }
@@ -336,7 +374,9 @@ export default function AdminTurtleRecordsPage() {
         color: 'green',
         icon: <IconCheck size={18} />,
       });
-      setQueueItems((prev) => prev.filter((i) => i.request_id !== selectedItem.request_id));
+      setQueueItems((prev) =>
+        prev.filter((i) => i.request_id !== selectedItem.request_id),
+      );
       setSelectedItem(null);
       setSelectedCandidate(null);
       setSheetsData(null);
@@ -374,21 +414,29 @@ export default function AdminTurtleRecordsPage() {
     const effectiveSheetName = sheetNameOverride || newTurtleSheetName;
     const effectiveSheetsData = sheetsDataOverride || newTurtleSheetsData;
     if (!effectiveSheetName) {
-      notifications.show({ title: 'Error', message: 'Please select a sheet for the new turtle', color: 'red' });
+      notifications.show({
+        title: 'Error',
+        message: 'Please select a sheet for the new turtle',
+        color: 'red',
+      });
       return;
     }
     setProcessing(selectedItem.request_id);
     try {
       const formState = effectiveSheetsData?.general_location || '';
       const formLocation = effectiveSheetsData?.location || '';
-      const finalLocation = formState && formLocation ? `${formState}/${formLocation}` : effectiveSheetName;
+      const finalLocation =
+        formState && formLocation ? `${formState}/${formLocation}` : effectiveSheetName;
       const locationParts = finalLocation.split('/');
       const turtleState = locationParts[0] || '';
       const turtleLocation = locationParts.slice(1).join('/') || '';
       let finalPrimaryId = newTurtlePrimaryId;
       if (!finalPrimaryId) {
         try {
-          const primaryIdResponse = await generatePrimaryId({ state: turtleState, location: turtleLocation });
+          const primaryIdResponse = await generatePrimaryId({
+            state: turtleState,
+            location: turtleLocation,
+          });
           if (primaryIdResponse.success && primaryIdResponse.primary_id) {
             finalPrimaryId = primaryIdResponse.primary_id;
             setNewTurtlePrimaryId(finalPrimaryId);
@@ -415,7 +463,8 @@ export default function AdminTurtleRecordsPage() {
         } catch {
           notifications.show({
             title: 'Warning',
-            message: 'Failed to create turtle in Google Sheets. Backend will create it as fallback.',
+            message:
+              'Failed to create turtle in Google Sheets. Backend will create it as fallback.',
             color: 'yellow',
           });
         }
@@ -433,9 +482,16 @@ export default function AdminTurtleRecordsPage() {
             }
           : undefined,
       });
-      notifications.show({ title: 'Success!', message: 'New turtle created successfully', color: 'green', icon: <IconCheck size={18} /> });
+      notifications.show({
+        title: 'Success!',
+        message: 'New turtle created successfully',
+        color: 'green',
+        icon: <IconCheck size={18} />,
+      });
       setShowNewTurtleModal(false);
-      setQueueItems((prev) => prev.filter((i) => i.request_id !== selectedItem.request_id));
+      setQueueItems((prev) =>
+        prev.filter((i) => i.request_id !== selectedItem.request_id),
+      );
       setSelectedItem(null);
       setSelectedCandidate(null);
       setSheetsData(null);
@@ -452,7 +508,10 @@ export default function AdminTurtleRecordsPage() {
     }
   };
 
-  const handleSaveNewTurtleSheetsData = async (data: TurtleSheetsData, sheetName: string) => {
+  const handleSaveNewTurtleSheetsData = async (
+    data: TurtleSheetsData,
+    sheetName: string,
+  ) => {
     setNewTurtleSheetsData(data);
     setNewTurtleSheetName(sheetName);
     const state = data.general_location || '';
@@ -488,7 +547,9 @@ export default function AdminTurtleRecordsPage() {
         message: 'Upload removed from review queue',
         color: 'green',
       });
-      setQueueItems((prev) => prev.filter((i) => i.request_id !== itemToDelete.request_id));
+      setQueueItems((prev) =>
+        prev.filter((i) => i.request_id !== itemToDelete.request_id),
+      );
       if (selectedItem?.request_id === itemToDelete.request_id) {
         setSelectedItem(null);
         setSelectedCandidate(null);
@@ -539,17 +600,26 @@ export default function AdminTurtleRecordsPage() {
   const location = selectedItem?.metadata.location || '';
 
   return (
-    <Container size='xl' py='xl'>
+    <Container size='xl' py={{ base: 'md', sm: 'xl' }} px={{ base: 'xs', sm: 'md' }}>
       <Stack gap='lg'>
-        {/* Header – compact */}
-        <Paper shadow='sm' p='md' radius='md' withBorder>
-          <Group justify='space-between' align='center' wrap='nowrap' gap='md'>
+        {/* Header – compact, wraps on mobile */}
+        <Paper shadow='sm' p={{ base: 'md', sm: 'md' }} radius='md' withBorder>
+          <Group justify='space-between' align='center' wrap='wrap' gap='md'>
             <div>
-              <Title order={2} size='h3'>Turtle Records</Title>
-              <Text size='xs' c='dimmed'>Review queue and Google Sheets</Text>
+              <Title order={2} size='h3'>
+                Turtle Records
+              </Title>
+              <Text size='xs' c='dimmed'>
+                Review queue and Google Sheets
+              </Text>
             </div>
             {activeTab === 'queue' && queueItems.length > 0 && (
-              <Badge size='md' variant='light' color='orange' leftSection={<IconPhoto size={12} />}>
+              <Badge
+                size='md'
+                variant='light'
+                color='orange'
+                leftSection={<IconPhoto size={12} />}
+              >
                 {queueItems.length} Pending
               </Badge>
             )}
@@ -557,7 +627,7 @@ export default function AdminTurtleRecordsPage() {
         </Paper>
 
         <Tabs value={activeTab} onChange={(value) => setActiveTab(value || 'queue')}>
-          <Tabs.List>
+          <Tabs.List grow style={{ flexWrap: 'wrap' }}>
             <Tabs.Tab value='queue' leftSection={<IconPhoto size={16} />}>
               Review Queue ({queueItems.length})
             </Tabs.Tab>
@@ -587,7 +657,7 @@ export default function AdminTurtleRecordsPage() {
               <>
                 {selectedItem ? (
                   <Stack gap='lg' style={{ position: 'relative' }}>
-                    <Group justify='space-between' wrap='nowrap'>
+                    <Group justify='space-between' wrap='wrap' gap='xs'>
                       <Button
                         variant='subtle'
                         leftSection={<IconList size={16} />}
@@ -642,13 +712,19 @@ export default function AdminTurtleRecordsPage() {
                       <Grid gutter='lg'>
                         <Grid.Col span={{ base: 12, md: 4 }}>
                           <Stack gap='xs'>
-                            <Text fw={600} size='sm' c='dimmed'>Uploaded Photo</Text>
+                            <Text fw={600} size='sm' c='dimmed'>
+                              Uploaded Photo
+                            </Text>
                             {selectedItem.uploaded_image && (
                               <Image
                                 src={getImageUrl(selectedItem.uploaded_image)}
                                 alt='Uploaded photo'
                                 radius='md'
-                                style={{ maxHeight: '320px', objectFit: 'contain', width: '100%' }}
+                                style={{
+                                  maxHeight: '320px',
+                                  objectFit: 'contain',
+                                  width: '100%',
+                                }}
                               />
                             )}
                           </Stack>
@@ -656,7 +732,9 @@ export default function AdminTurtleRecordsPage() {
                         <Grid.Col span={{ base: 12, md: 8 }}>
                           <Stack gap='xs'>
                             <Group gap='xs'>
-                              <Text fw={600} size='sm' c='dimmed'>Top 5 Matches</Text>
+                              <Text fw={600} size='sm' c='dimmed'>
+                                Top 5 Matches
+                              </Text>
                               {loadingCandidateNames && <Loader size='xs' />}
                             </Group>
                             <Flex gap='sm' wrap='wrap' align='stretch'>
@@ -677,9 +755,13 @@ export default function AdminTurtleRecordsPage() {
                                         ? '2px solid #228be6'
                                         : '1px solid #dee2e6',
                                     backgroundColor:
-                                      selectedCandidate === candidate.turtle_id ? '#e7f5ff' : 'white',
+                                      selectedCandidate === candidate.turtle_id
+                                        ? '#e7f5ff'
+                                        : 'white',
                                   }}
-                                  onClick={() => handleItemSelect(selectedItem, candidate.turtle_id)}
+                                  onClick={() =>
+                                    handleItemSelect(selectedItem, candidate.turtle_id)
+                                  }
                                 >
                                   <Stack gap={6}>
                                     {candidate.image_path ? (
@@ -687,22 +769,44 @@ export default function AdminTurtleRecordsPage() {
                                         src={getImageUrl(candidate.image_path)}
                                         alt={`Match ${candidate.rank}`}
                                         radius='sm'
-                                        style={{ height: 200, objectFit: 'cover', width: '100%' }}
+                                        style={{
+                                          height: 200,
+                                          objectFit: 'cover',
+                                          width: '100%',
+                                        }}
                                       />
                                     ) : (
                                       <Center style={{ height: 200 }} c='dimmed'>
                                         <IconPhoto size={48} />
                                       </Center>
                                     )}
-                                    <Text fw={600} size='sm' lineClamp={1} title={candidateNames[candidate.turtle_id] || candidate.turtle_id}>
-                                      {candidateNames[candidate.turtle_id] || candidate.turtle_id}
+                                    <Text
+                                      fw={600}
+                                      size='sm'
+                                      lineClamp={1}
+                                      title={
+                                        candidateNames[candidate.turtle_id] ||
+                                        candidate.turtle_id
+                                      }
+                                    >
+                                      {candidateNames[candidate.turtle_id] ||
+                                        candidate.turtle_id}
                                     </Text>
                                     <Text size='xs' c='dimmed'>
-                                      ID: {candidateOriginalIds[candidate.turtle_id] ?? candidate.turtle_id} · Score: {candidate.score}
+                                      ID:{' '}
+                                      {candidateOriginalIds[candidate.turtle_id] ??
+                                        candidate.turtle_id}{' '}
+                                      · Score: {candidate.score}
                                     </Text>
-                                    <Badge size='sm' variant='light' color='blue'>#{candidate.rank}</Badge>
+                                    <Badge size='sm' variant='light' color='blue'>
+                                      #{candidate.rank}
+                                    </Badge>
                                     {selectedCandidate === candidate.turtle_id && (
-                                      <IconCheck size={18} color='#228be6' style={{ alignSelf: 'center' }} />
+                                      <IconCheck
+                                        size={18}
+                                        color='#228be6'
+                                        style={{ alignSelf: 'center' }}
+                                      />
                                     )}
                                   </Stack>
                                 </Card>
@@ -714,35 +818,41 @@ export default function AdminTurtleRecordsPage() {
                     </Paper>
 
                     {/* Location hint from community (coords + map) – only when present */}
-                    {selectedItem.metadata.location_hint_lat != null && selectedItem.metadata.location_hint_lon != null && (
-                      <Paper shadow='sm' p='md' radius='md' withBorder>
-                        <Stack gap='sm'>
-                          <Group gap='xs'>
-                            <IconMapPin size={18} />
-                            <Text fw={600} size='sm'>Location hint from uploader</Text>
-                            {selectedItem.metadata.location_hint_source && (
-                              <Badge size='sm' variant='light' color='blue'>
-                                {selectedItem.metadata.location_hint_source}
-                              </Badge>
-                            )}
-                          </Group>
-                          <Text size='xs' c='dimmed'>
-                            {selectedItem.metadata.location_hint_lat.toFixed(5)}, {selectedItem.metadata.location_hint_lon.toFixed(5)}
-                          </Text>
-                          <MapDisplay
-                            latitude={selectedItem.metadata.location_hint_lat}
-                            longitude={selectedItem.metadata.location_hint_lon}
-                            height={220}
-                            zoom={15}
-                          />
-                        </Stack>
-                      </Paper>
-                    )}
+                    {selectedItem.metadata.location_hint_lat != null &&
+                      selectedItem.metadata.location_hint_lon != null && (
+                        <Paper shadow='sm' p='md' radius='md' withBorder>
+                          <Stack gap='sm'>
+                            <Group gap='xs'>
+                              <IconMapPin size={18} />
+                              <Text fw={600} size='sm'>
+                                Location hint from uploader
+                              </Text>
+                              {selectedItem.metadata.location_hint_source && (
+                                <Badge size='sm' variant='light' color='blue'>
+                                  {selectedItem.metadata.location_hint_source}
+                                </Badge>
+                              )}
+                            </Group>
+                            <Text size='xs' c='dimmed'>
+                              {selectedItem.metadata.location_hint_lat.toFixed(5)},{' '}
+                              {selectedItem.metadata.location_hint_lon.toFixed(5)}
+                            </Text>
+                            <MapDisplay
+                              latitude={selectedItem.metadata.location_hint_lat}
+                              longitude={selectedItem.metadata.location_hint_lon}
+                              height={220}
+                              zoom={15}
+                            />
+                          </Stack>
+                        </Paper>
+                      )}
 
                     {selectedCandidate ? (
                       <>
                         <Paper shadow='sm' p='md' radius='md' withBorder>
-                          <Text fw={600} size='md' mb='sm'>Google Sheets – selected match</Text>
+                          <Text fw={600} size='md' mb='sm'>
+                            Google Sheets – selected match
+                          </Text>
                           <ScrollArea h={520} type='auto'>
                             <TurtleSheetsDataForm
                               ref={sheetsFormRef}
@@ -750,9 +860,14 @@ export default function AdminTurtleRecordsPage() {
                               sheetName={sheetsData?.sheet_name}
                               state={state}
                               location={location}
-                              hintLocationFromCommunity={state && location ? `${state} / ${location}` : (state || location) || undefined}
+                              hintLocationFromCommunity={
+                                state && location
+                                  ? `${state} / ${location}`
+                                  : state || location || undefined
+                              }
                               hintCoordinates={
-                                selectedItem?.metadata?.location_hint_lat != null && selectedItem?.metadata?.location_hint_lon != null
+                                selectedItem?.metadata?.location_hint_lat != null &&
+                                selectedItem?.metadata?.location_hint_lon != null
                                   ? {
                                       latitude: selectedItem.metadata.location_hint_lat,
                                       longitude: selectedItem.metadata.location_hint_lon,
@@ -792,10 +907,12 @@ export default function AdminTurtleRecordsPage() {
                         <Center py='xl'>
                           <Stack gap='md' align='center'>
                             <Text size='sm' c='dimmed' ta='center'>
-                              Select one of the top 5 matches above to view and edit its Google Sheets data
+                              Select one of the top 5 matches above to view and edit its
+                              Google Sheets data
                             </Text>
                             <Text size='sm' c='dimmed' ta='center'>
-                              Or create a new turtle entry if none of the matches are suitable
+                              Or create a new turtle entry if none of the matches are
+                              suitable
                             </Text>
                             <Button
                               leftSection={<IconPlus size={16} />}
@@ -811,16 +928,27 @@ export default function AdminTurtleRecordsPage() {
                   </Stack>
                 ) : (
                   /* Pending list prominently in main area */
-                  <Paper shadow='sm' p='lg' radius='md' withBorder style={{ overflow: 'hidden' }}>
+                  <Paper
+                    shadow='sm'
+                    p='lg'
+                    radius='md'
+                    withBorder
+                    style={{ overflow: 'hidden' }}
+                  >
                     <Stack gap='md' style={{ minWidth: 0 }}>
-                      <Text fw={600} size='lg'>Pending Reviews</Text>
+                      <Text fw={600} size='lg'>
+                        Pending Reviews
+                      </Text>
                       <Text size='sm' c='dimmed'>
                         Click an item to review matches and approve.
                       </Text>
                       <ScrollArea h={560} type='auto' scrollbars='y'>
                         <Grid gutter='md' style={{ minWidth: 0 }}>
                           {queueItems.map((item) => (
-                            <Grid.Col key={item.request_id} span={{ base: 12, sm: 6, md: 4 }}>
+                            <Grid.Col
+                              key={item.request_id}
+                              span={{ base: 12, sm: 6, md: 4 }}
+                            >
                               <Card
                                 shadow='sm'
                                 padding='md'
@@ -835,9 +963,13 @@ export default function AdminTurtleRecordsPage() {
                               >
                                 <Stack gap='sm'>
                                   <Group justify='space-between'>
-                                    <Badge color='orange' variant='light' size='sm'>Pending</Badge>
+                                    <Badge color='orange' variant='light' size='sm'>
+                                      Pending
+                                    </Badge>
                                     <Group gap='xs'>
-                                      <Text size='xs' c='dimmed'>{item.metadata.finder || 'Anonymous'}</Text>
+                                      <Text size='xs' c='dimmed'>
+                                        {item.metadata.finder || 'Anonymous'}
+                                      </Text>
                                       <Button
                                         variant='subtle'
                                         color='red'
@@ -858,18 +990,25 @@ export default function AdminTurtleRecordsPage() {
                                       style={{ maxHeight: 180, objectFit: 'contain' }}
                                     />
                                   )}
-                                  <Text size='sm' c='dimmed'>{item.candidates.length} matches</Text>
+                                  <Text size='sm' c='dimmed'>
+                                    {item.candidates.length} matches
+                                  </Text>
                                   {item.metadata.state && item.metadata.location && (
                                     <Text size='xs' c='dimmed'>
                                       {item.metadata.state} / {item.metadata.location}
                                     </Text>
                                   )}
-                                  {item.metadata.location_hint_lat != null && item.metadata.location_hint_lon != null && (
-                                    <Text size='xs' c='dimmed'>
-                                      📍 Hint: {item.metadata.location_hint_lat.toFixed(5)}, {item.metadata.location_hint_lon.toFixed(5)}
-                                      {item.metadata.location_hint_source ? ` (${item.metadata.location_hint_source})` : ''}
-                                    </Text>
-                                  )}
+                                  {item.metadata.location_hint_lat != null &&
+                                    item.metadata.location_hint_lon != null && (
+                                      <Text size='xs' c='dimmed'>
+                                        📍 Hint:{' '}
+                                        {item.metadata.location_hint_lat.toFixed(5)},{' '}
+                                        {item.metadata.location_hint_lon.toFixed(5)}
+                                        {item.metadata.location_hint_source
+                                          ? ` (${item.metadata.location_hint_source})`
+                                          : ''}
+                                      </Text>
+                                    )}
                                 </Stack>
                               </Card>
                             </Grid.Col>
@@ -882,13 +1021,20 @@ export default function AdminTurtleRecordsPage() {
 
                 <Modal
                   opened={deleteModalOpen}
-                  onClose={() => { if (!deleting) { setDeleteModalOpen(false); setItemToDelete(null); } }}
+                  onClose={() => {
+                    if (!deleting) {
+                      setDeleteModalOpen(false);
+                      setItemToDelete(null);
+                    }
+                  }}
                   title='Remove upload from queue'
                   centered
                 >
                   <Stack gap='md'>
                     <Text size='sm' c='dimmed'>
-                      This will permanently delete this upload from the review queue. It will not be processed or added to any turtle. Use this for junk or spam only.
+                      This will permanently delete this upload from the review queue. It
+                      will not be processed or added to any turtle. Use this for junk or
+                      spam only.
                     </Text>
                     <Text size='sm' fw={500}>
                       This cannot be undone.
@@ -896,7 +1042,10 @@ export default function AdminTurtleRecordsPage() {
                     <Group justify='flex-end' gap='sm'>
                       <Button
                         variant='default'
-                        onClick={() => { setDeleteModalOpen(false); setItemToDelete(null); }}
+                        onClick={() => {
+                          setDeleteModalOpen(false);
+                          setItemToDelete(null);
+                        }}
                         disabled={deleting}
                       >
                         Cancel
@@ -922,10 +1071,18 @@ export default function AdminTurtleRecordsPage() {
               <Grid.Col span={{ base: 12, md: 4 }}>
                 <Paper shadow='sm' p='md' radius='md' withBorder>
                   <Stack gap='md'>
-                    <Text fw={500} size='lg'>Search & Filter</Text>
+                    <Text fw={500} size='lg'>
+                      Search & Filter
+                    </Text>
                     <Select
                       label='Location (Spreadsheet)'
-                      description={sheetsListLoading ? 'Loading locations…' : selectedSheetFilter ? 'Only turtles from this sheet' : 'All sheets'}
+                      description={
+                        sheetsListLoading
+                          ? 'Loading locations…'
+                          : selectedSheetFilter
+                            ? 'Only turtles from this sheet'
+                            : 'All sheets'
+                      }
                       placeholder='All locations'
                       leftSection={<IconMapPin size={16} />}
                       value={selectedSheetFilter}
@@ -949,7 +1106,11 @@ export default function AdminTurtleRecordsPage() {
                       value={searchQuery}
                       onChange={(e) => setSearchQuery(e.target.value)}
                     />
-                    <Button onClick={() => loadAllTurtles()} loading={turtlesLoading} fullWidth>
+                    <Button
+                      onClick={() => loadAllTurtles()}
+                      loading={turtlesLoading}
+                      fullWidth
+                    >
                       Refresh
                     </Button>
                     <Divider />
@@ -968,11 +1129,13 @@ export default function AdminTurtleRecordsPage() {
                             style={{
                               cursor: 'pointer',
                               border:
-                                selectedTurtle?.primary_id === (turtle.primary_id || turtle.id)
+                                selectedTurtle?.primary_id ===
+                                (turtle.primary_id || turtle.id)
                                   ? '2px solid #228be6'
                                   : '1px solid #dee2e6',
                               backgroundColor:
-                                selectedTurtle?.primary_id === (turtle.primary_id || turtle.id)
+                                selectedTurtle?.primary_id ===
+                                (turtle.primary_id || turtle.id)
                                   ? '#e7f5ff'
                                   : 'white',
                             }}
@@ -989,7 +1152,7 @@ export default function AdminTurtleRecordsPage() {
                                   No name
                                 </Text>
                               )}
-                              
+
                               {/* Location and Species */}
                               <Stack gap={2}>
                                 {turtle.location && (
@@ -1003,7 +1166,7 @@ export default function AdminTurtleRecordsPage() {
                                   </Text>
                                 )}
                               </Stack>
-                              
+
                               {/* IDs - smaller, at the bottom */}
                               <Stack gap={2} mt='xs'>
                                 {turtle.primary_id && (
@@ -1040,7 +1203,9 @@ export default function AdminTurtleRecordsPage() {
                         sheetName={selectedTurtle.sheet_name}
                         state={selectedTurtle.general_location || ''}
                         location={selectedTurtle.location || ''}
-                        primaryId={selectedTurtle.primary_id || selectedTurtle.id || undefined}
+                        primaryId={
+                          selectedTurtle.primary_id || selectedTurtle.id || undefined
+                        }
                         mode='edit'
                         onSave={handleSaveTurtleFromBrowser}
                       />
@@ -1055,7 +1220,8 @@ export default function AdminTurtleRecordsPage() {
                           Select a turtle to edit
                         </Text>
                         <Text size='sm' c='dimmed' ta='center'>
-                          Choose a turtle from the list to view and edit its Google Sheets data
+                          Choose a turtle from the list to view and edit its Google Sheets
+                          data
                         </Text>
                       </Stack>
                     </Center>
@@ -1067,22 +1233,25 @@ export default function AdminTurtleRecordsPage() {
         </Tabs>
       </Stack>
 
-      {/* Create New Turtle Modal (Review Queue) */}
+      {/* Create New Turtle Modal (Review Queue) - full width on mobile */}
       <Modal
         opened={showNewTurtleModal}
         onClose={() => setShowNewTurtleModal(false)}
         title='Create New Turtle'
-        size='xl'
+        size={isMobile ? '100%' : 'xl'}
         centered
       >
         <Stack gap='md'>
           <Text size='sm' c='dimmed'>
-            Create a new turtle entry for this upload. Select a sheet and fill in the turtle data below.
-            Primary ID will be automatically generated. ID and ID2 can be entered manually if needed.
+            Create a new turtle entry for this upload. Select a sheet and fill in the
+            turtle data below. Primary ID will be automatically generated. ID and ID2 can
+            be entered manually if needed.
           </Text>
           {newTurtlePrimaryId && (
             <Paper p='sm' withBorder>
-              <Text size='sm' c='dimmed'>Primary ID</Text>
+              <Text size='sm' c='dimmed'>
+                Primary ID
+              </Text>
               <Text fw={500}>{newTurtlePrimaryId}</Text>
             </Paper>
           )}
@@ -1093,10 +1262,13 @@ export default function AdminTurtleRecordsPage() {
             hintLocationFromCommunity={
               selectedItem?.metadata?.state && selectedItem?.metadata?.location
                 ? `${selectedItem.metadata.state} / ${selectedItem.metadata.location}`
-                : selectedItem?.metadata?.state || selectedItem?.metadata?.location || undefined
+                : selectedItem?.metadata?.state ||
+                  selectedItem?.metadata?.location ||
+                  undefined
             }
             hintCoordinates={
-              selectedItem?.metadata?.location_hint_lat != null && selectedItem?.metadata?.location_hint_lon != null
+              selectedItem?.metadata?.location_hint_lat != null &&
+              selectedItem?.metadata?.location_hint_lon != null
                 ? {
                     latitude: selectedItem.metadata.location_hint_lat,
                     longitude: selectedItem.metadata.location_hint_lon,

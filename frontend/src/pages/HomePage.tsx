@@ -72,7 +72,9 @@ export default function HomePage() {
 
   const matchSheetForUpload =
     role === 'admin'
-      ? (selectedMatchSheet === MATCH_ALL_VALUE ? '' : selectedMatchSheet)
+      ? selectedMatchSheet === MATCH_ALL_VALUE
+        ? ''
+        : selectedMatchSheet
       : undefined;
 
   const {
@@ -166,25 +168,42 @@ export default function HomePage() {
   };
 
   return (
-    <Container size='sm' py='xl'>
-      <Paper shadow='sm' p='xl' radius='md' withBorder>
+    <Container size='sm' py={{ base: 'md', sm: 'xl' }} px={{ base: 'xs', sm: 'md' }}>
+      <Paper shadow='sm' p={{ base: 'md', sm: 'xl' }} radius='md' withBorder>
         <Stack gap='lg'>
           <Center>
             <Stack gap='xs' align='center' style={{ width: '100%' }}>
-              <Group justify='space-between' style={{ width: '100%' }}>
-                <div style={{ flex: 1 }} /> {/* Spacer for centering */}
-                <Title order={1}>Photo Upload</Title>
-                <Group style={{ flex: 1 }} justify='flex-end'>
+              {isMobile ? (
+                <Stack gap='xs' align='center' style={{ width: '100%' }}>
+                  <Title order={1} ta='center'>
+                    Photo Upload
+                  </Title>
                   <Button
                     variant='light'
                     size='sm'
                     leftSection={<IconInfoCircle size={16} />}
                     onClick={() => setInstructionsOpened(true)}
+                    fullWidth
                   >
                     View Instructions
                   </Button>
+                </Stack>
+              ) : (
+                <Group justify='space-between' style={{ width: '100%' }}>
+                  <div style={{ flex: 1 }} />
+                  <Title order={1}>Photo Upload</Title>
+                  <Group style={{ flex: 1 }} justify='flex-end'>
+                    <Button
+                      variant='light'
+                      size='sm'
+                      leftSection={<IconInfoCircle size={16} />}
+                      onClick={() => setInstructionsOpened(true)}
+                    >
+                      View Instructions
+                    </Button>
+                  </Group>
                 </Group>
-              </Group>
+              )}
               <Text size='sm' c='dimmed' ta='center'>
                 Upload a photo to save it in the backend
               </Text>
@@ -200,7 +219,9 @@ export default function HomePage() {
               {sheetsLoading ? (
                 <Group gap='xs'>
                   <Loader size='sm' />
-                  <Text size='sm' c='dimmed'>Loading locations…</Text>
+                  <Text size='sm' c='dimmed'>
+                    Loading locations…
+                  </Text>
                 </Group>
               ) : (
                 <Select
@@ -216,7 +237,8 @@ export default function HomePage() {
                 />
               )}
               <Text size='xs' c='dimmed'>
-                Default: only turtles from this location. &quot;All locations&quot; only in exceptional cases.
+                Default: only turtles from this location. &quot;All locations&quot; only
+                in exceptional cases.
               </Text>
             </Stack>
           )}

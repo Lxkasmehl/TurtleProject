@@ -18,6 +18,7 @@ import {
 } from '@mantine/core';
 import { IconPhoto, IconCheck, IconArrowLeft, IconPlus } from '@tabler/icons-react';
 import { useEffect, useState, useRef } from 'react';
+import { useMediaQuery } from '@mantine/hooks';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useUser } from '../hooks/useUser';
 import {
@@ -60,6 +61,7 @@ export default function AdminTurtleMatchPage() {
   const [newTurtleSheetName, setNewTurtleSheetName] = useState('');
   const [loadingTurtleData, setLoadingTurtleData] = useState(false);
   const formRef = useRef<TurtleSheetsDataFormRef>(null);
+  const isMobile = useMediaQuery('(max-width: 576px)');
 
   useEffect(() => {
     if (!authChecked) return;
@@ -441,12 +443,12 @@ export default function AdminTurtleMatchPage() {
   const location = locationParts.slice(1).join('/') || '';
 
   return (
-    <Container size='xl' py='xl'>
+    <Container size='xl' py={{ base: 'md', sm: 'xl' }} px={{ base: 'xs', sm: 'md' }}>
       <Stack gap='lg'>
-        {/* Header */}
-        <Paper shadow='sm' p='xl' radius='md' withBorder>
-          <Group justify='space-between' align='center'>
-            <Group gap='md'>
+        {/* Header - stacks on mobile */}
+        <Paper shadow='sm' p={{ base: 'md', sm: 'xl' }} radius='md' withBorder>
+          <Group justify='space-between' align='flex-start' wrap='wrap' gap='md'>
+            <Group gap='md' wrap='wrap'>
               <Button
                 variant='light'
                 leftSection={<IconArrowLeft size={16} />}
@@ -507,7 +509,11 @@ export default function AdminTurtleMatchPage() {
                       }
                       alt='Uploaded photo'
                       radius='md'
-                      style={{ maxHeight: '400px', objectFit: 'contain' }}
+                      style={{
+                        maxHeight: 'min(400px, 50vh)',
+                        objectFit: 'contain',
+                        width: '100%',
+                      }}
                     />
                   </Stack>
                 </Paper>
@@ -518,7 +524,7 @@ export default function AdminTurtleMatchPage() {
                     <Text fw={500} size='lg'>
                       Top 5 Matches
                     </Text>
-                    <ScrollArea h={400}>
+                    <ScrollArea h={320}>
                       <Stack gap='sm'>
                         {matchData.matches.map((match, index) => (
                           <Card
@@ -621,26 +627,26 @@ export default function AdminTurtleMatchPage() {
                       </Group>
                       <Divider />
                       <Grid>
-                        <Grid.Col span={6}>
+                        <Grid.Col span={{ base: 12, sm: 6 }}>
                           <Text size='sm' c='dimmed'>
                             Turtle ID
                           </Text>
                           <Text fw={500}>{selectedMatch}</Text>
                         </Grid.Col>
-                        <Grid.Col span={6}>
+                        <Grid.Col span={{ base: 12, sm: 6 }}>
                           <Text size='sm' c='dimmed'>
                             Location
                           </Text>
                           <Text fw={500}>{selectedMatchData.location}</Text>
                         </Grid.Col>
-                        <Grid.Col span={6}>
+                        <Grid.Col span={{ base: 12, sm: 6 }}>
                           <Text size='sm' c='dimmed'>
                             Distance
                           </Text>
                           <Text fw={500}>{selectedMatchData.distance.toFixed(4)}</Text>
                         </Grid.Col>
                         {primaryId && (
-                          <Grid.Col span={6}>
+                          <Grid.Col span={{ base: 12, sm: 6 }}>
                             <Text size='sm' c='dimmed'>
                               Primary ID
                             </Text>
@@ -732,12 +738,12 @@ export default function AdminTurtleMatchPage() {
         )}
       </Stack>
 
-      {/* New Turtle Creation Modal */}
+      {/* New Turtle Creation Modal - full width on mobile */}
       <Modal
         opened={showNewTurtleModal}
         onClose={() => setShowNewTurtleModal(false)}
         title='Create New Turtle'
-        size='xl'
+        size={isMobile ? '100%' : 'xl'}
         centered
       >
         <Stack gap='md'>

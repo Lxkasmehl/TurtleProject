@@ -2,6 +2,7 @@ import {
   Card,
   Stack,
   Group,
+  Grid,
   Image,
   Button,
   Text,
@@ -13,6 +14,7 @@ import {
   TextInput,
   SegmentedControl,
 } from '@mantine/core';
+import { useMediaQuery } from '@mantine/hooks';
 import { Transition } from '@mantine/core';
 import {
   IconCheck,
@@ -67,11 +69,16 @@ export function PreviewCard({
   const [stillAtLocation, setStillAtLocation] = useState<'yes' | 'no' | null>(null);
   const [manualLat, setManualLat] = useState('');
   const [manualLon, setManualLon] = useState('');
+  const isMobile = useMediaQuery('(max-width: 576px)');
 
   const prevStillAtLocation = useRef<'yes' | 'no' | null>(null);
   // When user selects "I'm still at the turtle's location", request GPS immediately (once per switch to 'yes')
   useEffect(() => {
-    if (stillAtLocation === 'yes' && prevStillAtLocation.current !== 'yes' && requestLocationHint) {
+    if (
+      stillAtLocation === 'yes' &&
+      prevStillAtLocation.current !== 'yes' &&
+      requestLocationHint
+    ) {
       requestLocationHint();
     }
     prevStillAtLocation.current = stillAtLocation;
@@ -118,11 +125,14 @@ export function PreviewCard({
               <Stack gap='sm'>
                 <Alert color='blue' radius='md'>
                   <Text size='xs'>
-                    Optionally share where you found this turtle. This is only shown to admins as a hint and is never saved in the database.
+                    Optionally share where you found this turtle. This is only shown to
+                    admins as a hint and is never saved in the database.
                   </Text>
                 </Alert>
                 <Stack gap='xs'>
-                  <Text size='sm' fw={500}>Exact spot (optional)</Text>
+                  <Text size='sm' fw={500}>
+                    Exact spot (optional)
+                  </Text>
                   <SegmentedControl
                     value={stillAtLocation ?? ''}
                     onChange={(v) => {
@@ -144,17 +154,31 @@ export function PreviewCard({
                   {stillAtLocation === 'yes' && setLocationHint && (
                     <Group gap='xs'>
                       {isGettingLocation ? (
-                        <Text size='xs' c='dimmed' style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <Text
+                          size='xs'
+                          c='dimmed'
+                          style={{ display: 'flex', alignItems: 'center', gap: 6 }}
+                        >
                           <Loader size={14} />
                           Getting your location…
                         </Text>
                       ) : locationHint?.source === 'gps' ? (
                         <>
-                          <Text size='xs' c='dimmed' style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                          <Text
+                            size='xs'
+                            c='dimmed'
+                            style={{ display: 'flex', alignItems: 'center', gap: 6 }}
+                          >
                             <IconCurrentLocation size={14} />
-                            Location shared: {locationHint.latitude.toFixed(5)}, {locationHint.longitude.toFixed(5)}
+                            Location shared: {locationHint.latitude.toFixed(5)},{' '}
+                            {locationHint.longitude.toFixed(5)}
                           </Text>
-                          <Button size='xs' variant='subtle' color='gray' onClick={() => setLocationHint(null)}>
+                          <Button
+                            size='xs'
+                            variant='subtle'
+                            color='gray'
+                            onClick={() => setLocationHint(null)}
+                          >
                             Clear
                           </Button>
                         </>
@@ -168,57 +192,80 @@ export function PreviewCard({
                   {stillAtLocation === 'no' && setLocationHint && (
                     <Stack gap='xs'>
                       <Text size='xs' c='dimmed'>
-                        Click on the map to set the spot where you saw the turtle. You can also type coordinates below.
+                        Click on the map to set the spot where you saw the turtle. You can
+                        also type coordinates below.
                       </Text>
                       <MapPicker
-                        height={260}
+                        height={isMobile ? 220 : 260}
                         value={
-                          locationHint?.source === 'manual' || (locationHint && stillAtLocation === 'no')
+                          locationHint?.source === 'manual' ||
+                          (locationHint && stillAtLocation === 'no')
                             ? { lat: locationHint.latitude, lon: locationHint.longitude }
                             : null
                         }
                         onChange={(lat, lon) => {
                           setManualLat(String(lat));
                           setManualLon(String(lon));
-                          setLocationHint({ latitude: lat, longitude: lon, source: 'manual' });
+                          setLocationHint({
+                            latitude: lat,
+                            longitude: lon,
+                            source: 'manual',
+                          });
                         }}
                       />
-                      <Group grow>
-                        <TextInput
-                          size='xs'
-                          label='Latitude'
-                          placeholder='e.g. 52.52'
-                          value={manualLat}
-                          onChange={(e) => {
-                            setManualLat(e.target.value);
-                            const lat = parseFloat(e.target.value);
-                            const lon = parseFloat(manualLon);
-                            if (!Number.isNaN(lat) && !Number.isNaN(lon)) {
-                              setLocationHint({ latitude: lat, longitude: lon, source: 'manual' });
-                            } else {
-                              setLocationHint(null);
-                            }
-                          }}
-                        />
-                        <TextInput
-                          size='xs'
-                          label='Longitude'
-                          placeholder='e.g. 13.405'
-                          value={manualLon}
-                          onChange={(e) => {
-                            setManualLon(e.target.value);
-                            const lat = parseFloat(manualLat);
-                            const lon = parseFloat(e.target.value);
-                            if (!Number.isNaN(lat) && !Number.isNaN(lon)) {
-                              setLocationHint({ latitude: lat, longitude: lon, source: 'manual' });
-                            } else {
-                              setLocationHint(null);
-                            }
-                          }}
-                        />
-                      </Group>
+                      <Grid>
+                        <Grid.Col span={{ base: 12, sm: 6 }}>
+                          <TextInput
+                            size='xs'
+                            label='Latitude'
+                            placeholder='e.g. 52.52'
+                            value={manualLat}
+                            onChange={(e) => {
+                              setManualLat(e.target.value);
+                              const lat = parseFloat(e.target.value);
+                              const lon = parseFloat(manualLon);
+                              if (!Number.isNaN(lat) && !Number.isNaN(lon)) {
+                                setLocationHint({
+                                  latitude: lat,
+                                  longitude: lon,
+                                  source: 'manual',
+                                });
+                              } else {
+                                setLocationHint(null);
+                              }
+                            }}
+                          />
+                        </Grid.Col>
+                        <Grid.Col span={{ base: 12, sm: 6 }}>
+                          <TextInput
+                            size='xs'
+                            label='Longitude'
+                            placeholder='e.g. 13.405'
+                            value={manualLon}
+                            onChange={(e) => {
+                              setManualLon(e.target.value);
+                              const lat = parseFloat(manualLat);
+                              const lon = parseFloat(e.target.value);
+                              if (!Number.isNaN(lat) && !Number.isNaN(lon)) {
+                                setLocationHint({
+                                  latitude: lat,
+                                  longitude: lon,
+                                  source: 'manual',
+                                });
+                              } else {
+                                setLocationHint(null);
+                              }
+                            }}
+                          />
+                        </Grid.Col>
+                      </Grid>
                       {locationHint?.source === 'manual' && (
-                        <Button size='xs' variant='subtle' color='gray' onClick={() => setLocationHint(null)}>
+                        <Button
+                          size='xs'
+                          variant='subtle'
+                          color='gray'
+                          onClick={() => setLocationHint(null)}
+                        >
                           Clear location
                         </Button>
                       )}
