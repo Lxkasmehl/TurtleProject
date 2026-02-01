@@ -2,6 +2,7 @@
 Migration functions for Google Sheets
 """
 
+import re
 import time
 import threading
 import random
@@ -9,6 +10,9 @@ from typing import Dict, Optional
 from googleapiclient.errors import HttpError
 from .helpers import escape_sheet_name, column_index_to_letter
 from .sheet_management import ensure_primary_id_column
+
+# Biology ID format: one letter + digits. When parsing max number we accept any letter (M/F/J/U).
+BIOLOGY_ID_PATTERN = re.compile(r'^[A-Za-z](\d+)$')
 
 
 def generate_primary_id(service, spreadsheet_id: str, list_sheets_func=None, find_row_by_primary_id_func=None,
@@ -90,6 +94,87 @@ def generate_primary_id(service, spreadsheet_id: str, list_sheets_func=None, fin
     timestamp = int(time.time() * 1000000)  # Microseconds
     random_part = random.randint(100000, 999999)
     return f"T{timestamp}{random_part}"
+
+
+def get_max_biology_id_number(service, spreadsheet_id: str, sheet_name: str,
+                               get_all_column_indices_func=None) -> int:
+    """
+    Scan the "ID" column in the given sheet only and return the highest numeric part.
+    IDs are expected to match format: one letter + digits (e.g. F1, M2, U10).
+
+    Args:
+        service: Google Sheets API service object
+        spreadsheet_id: Google Sheets spreadsheet ID
+        sheet_name: Name of the sheet (tab) to scan
+        get_all_column_indices_func: Function(sheet_name) -> dict of header -> col index
+
+    Returns:
+        The maximum number found (0 if no valid IDs).
+    """
+    backup_sheet_names = ['Backup (Initial State)', 'Backup (Inital State)', 'Backup']
+    if sheet_name in backup_sheet_names:
+        return 0
+
+    try:
+        column_indices = get_all_column_indices_func(sheet_name) if get_all_column_indices_func else {}
+        id_col_idx = column_indices.get('ID')
+        if id_col_idx is None:
+            return 0
+
+        escaped_sheet = escape_sheet_name(sheet_name)
+        col_letter = column_index_to_letter(id_col_idx)
+        range_name = f"{escaped_sheet}!{col_letter}2:{col_letter}"
+        result = service.spreadsheets().values().get(
+            spreadsheetId=spreadsheet_id,
+            range=range_name
+        ).execute()
+        values = result.get('values', [])
+        max_num = 0
+        for row in values:
+            if not row:
+                continue
+            raw = row[0] if isinstance(row, list) and len(row) > 0 else row
+            cell = (raw or '').strip()
+            if not cell:
+                continue
+            match = BIOLOGY_ID_PATTERN.match(cell)
+            if match:
+                num = int(match.group(1))
+                if num > max_num:
+                    max_num = num
+        return max_num
+    except HttpError as e:
+        print(f"Warning: Error reading ID column from sheet '{sheet_name}': {e}")
+        return 0
+    except Exception as e:
+        print(f"Warning: Error scanning sheet '{sheet_name}' for biology ID: {e}")
+        return 0
+
+
+def generate_biology_id(service, spreadsheet_id: str, sheet_name: str,
+                       get_all_column_indices_func=None, gender: str = 'U') -> str:
+    """
+    Generate the next biology ID: one letter (M/F/U) + next sequence number.
+    The number is one higher than the current maximum in the ID column of the given sheet only.
+
+    Args:
+        service: Google Sheets API service object
+        spreadsheet_id: Google Sheets spreadsheet ID
+        sheet_name: Name of the sheet (tab) the turtle belongs to
+        get_all_column_indices_func: Function(sheet_name) -> dict of header -> col index
+        gender: One of 'M', 'F', 'U' (Male, Female, Unknown/Juvenile). Default 'U'.
+
+    Returns:
+        New ID string (e.g. 'M1', 'F2', 'U3').
+    """
+    prefix = (gender or 'U').upper()
+    if prefix not in ('M', 'F', 'U'):
+        prefix = 'U'
+    max_num = get_max_biology_id_number(
+        service, spreadsheet_id, sheet_name, get_all_column_indices_func
+    )
+    next_num = max_num + 1
+    return f"{prefix}{next_num}"
 
 
 def needs_migration(service, spreadsheet_id: str, list_sheets_func=None, ensure_primary_id_column_func=None) -> bool:

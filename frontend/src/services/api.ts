@@ -465,6 +465,17 @@ export interface GeneratePrimaryIdResponse {
   error?: string;
 }
 
+export interface GenerateTurtleIdRequest {
+  sex: string; // M, F, J, or U
+  sheet_name: string; // Sheet (tab) the turtle belongs to; sequence is scoped to this sheet
+}
+
+export interface GenerateTurtleIdResponse {
+  success: boolean;
+  id?: string;
+  error?: string;
+}
+
 export interface CreateTurtleSheetsDataRequest {
   sheet_name: string;
   state?: string;
@@ -620,6 +631,48 @@ export const generatePrimaryId = async (
     if (!response.ok) {
       const error = await response.json();
       throw new Error(error.error || 'Failed to generate primary ID');
+    }
+
+    return await response.json();
+  } catch (error) {
+    clearTimeout(timeoutId);
+    if (error instanceof Error && error.name === 'AbortError') {
+      throw new Error(`Request timeout after ${timeoutMs}ms`);
+    }
+    throw error;
+  }
+};
+
+// Generate the next biology ID (ID column) based on sex: M/F/U + sequence number
+export const generateTurtleId = async (
+  data: GenerateTurtleIdRequest,
+  timeoutMs: number = 10000,
+): Promise<GenerateTurtleIdResponse> => {
+  const token = getToken();
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+  };
+
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
+
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    const response = await fetch(`${TURTLE_API_BASE_URL}/sheets/generate-id`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(data),
+      signal: controller.signal,
+    });
+
+    clearTimeout(timeoutId);
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Failed to generate turtle ID');
     }
 
     return await response.json();

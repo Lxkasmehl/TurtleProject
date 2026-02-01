@@ -161,6 +161,18 @@ class GoogleSheetsService:
         return migration.generate_primary_id(
             self.service, self.spreadsheet_id, self.list_sheets, self._find_row_by_primary_id, state, location
         )
+
+    def generate_biology_id(self, gender: str = 'U', sheet_name: Optional[str] = None) -> str:
+        """
+        Generate the next biology ID (ID column): one letter (M/F/U) + next sequence number.
+        The number is scoped to the given sheet only.
+        Gender: M=Male, F=Female, U=Unknown/Juvenile.
+        """
+        if not sheet_name or not sheet_name.strip():
+            raise ValueError("sheet_name is required for biology ID generation")
+        return migration.generate_biology_id(
+            self.service, self.spreadsheet_id, sheet_name.strip(), self._get_all_column_indices, gender
+        )
     
     def needs_migration(self) -> bool:
         """Check if migration is needed (i.e., there are turtles with ID but no Primary ID)."""

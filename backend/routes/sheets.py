@@ -137,6 +137,46 @@ def register_sheets_routes(app):
             print(f"Traceback:\n{error_trace}")
             return jsonify({'error': f'Failed to generate primary ID: {str(e)}'}), 500
 
+    @app.route('/api/sheets/generate-id', methods=['POST'])
+    @require_admin
+    def generate_turtle_id():
+        """
+        Generate the next biology ID (ID column) for the given sheet: M/F/U + next sequence number (Admin only).
+        Body: { "sex": "M", "sheet_name": "Kansas" }. Sequence is scoped to that sheet only.
+        """
+        try:
+            data = request.json or {}
+            sex = (data.get('sex') or data.get('gender') or '').strip().upper()
+            sheet_name = (data.get('sheet_name') or '').strip()
+            # Normalize: M, F, J->U, U; anything else -> U
+            if sex in ('M', 'F'):
+                gender = sex
+            elif sex in ('J', 'U', ''):
+                gender = 'U'
+            else:
+                gender = 'U'
+
+            if not sheet_name:
+                return jsonify({'error': 'sheet_name is required for ID generation'}), 400
+
+            service = get_sheets_service()
+            if not service:
+                return jsonify({'error': 'Google Sheets service not configured'}), 503
+
+            id_value = service.generate_biology_id(gender, sheet_name)
+            return jsonify({
+                'success': True,
+                'id': id_value
+            })
+        except Exception as e:
+            error_trace = traceback.format_exc()
+            try:
+                print(f"❌ Error generating turtle ID: {str(e)}")
+            except UnicodeEncodeError:
+                print(f"[ERROR] Error generating turtle ID: {str(e)}")
+            print(f"Traceback:\n{error_trace}")
+            return jsonify({'error': f'Failed to generate turtle ID: {str(e)}'}), 500
+
     @app.route('/api/sheets/turtle', methods=['POST'])
     @require_admin
     def create_turtle_sheets_data():
@@ -164,19 +204,20 @@ def register_sheets_routes(app):
             else:
                 primary_id = service.generate_primary_id(state, location)
                 turtle_data['primary_id'] = primary_id
-            
-            # Keep existing 'id' if present (user input), otherwise use primary_id as fallback
-            # This allows users to enter their own ID while still having a fallback
-            if 'id' not in turtle_data or not turtle_data.get('id'):
-                turtle_data['id'] = primary_id
-            
+
+            # Always auto-generate biology ID (ID column) on create: M/F/U + next sequence number (scoped to this sheet)
+            sex = (turtle_data.get('sex') or '').strip().upper()
+            gender = sex if sex in ('M', 'F') else ('U' if sex in ('J', 'U', '') else 'U')
+            turtle_data['id'] = service.generate_biology_id(gender, sheet_name)
+
             created_id = service.create_turtle_data(turtle_data, sheet_name, state, location)
-            
+
             if created_id:
                 print(f"✅ Successfully created turtle in sheets with Primary ID: {created_id}")
                 return jsonify({
                     'success': True,
                     'primary_id': created_id,
+                    'id': turtle_data.get('id'),
                     'message': 'Turtle data created successfully'
                 })
             else:
@@ -235,9 +276,11 @@ def register_sheets_routes(app):
                 # Create in new sheet
                 turtle_data_clean = {k: v for k, v in turtle_data.items() if k != 'sheet_name'}
                 turtle_data_clean['primary_id'] = primary_id
-                if 'id' not in turtle_data_clean:
-                    turtle_data_clean['id'] = primary_id
-                
+                if not turtle_data_clean.get('id'):
+                    sex = (turtle_data_clean.get('sex') or '').strip().upper()
+                    gender = sex if sex in ('M', 'F') else ('U' if sex in ('J', 'U', '') else 'U')
+                    turtle_data_clean['id'] = service.generate_biology_id(gender, sheet_name)
+
                 created_id = service.create_turtle_data(turtle_data_clean, sheet_name, state, location)
                 if created_id:
                     return jsonify({
@@ -268,9 +311,11 @@ def register_sheets_routes(app):
                 turtle_data_clean = {k: v for k, v in turtle_data.items() if k != 'sheet_name'}
                 # Set primary_id in the Primary ID column (not just id)
                 turtle_data_clean['primary_id'] = primary_id
-                # Also set id if not present (for backwards compatibility)
-                if 'id' not in turtle_data_clean:
-                    turtle_data_clean['id'] = primary_id
+                # Auto-generate biology ID (ID column) from sex if not present (scoped to this sheet)
+                if not turtle_data_clean.get('id'):
+                    sex = (turtle_data_clean.get('sex') or '').strip().upper()
+                    gender = sex if sex in ('M', 'F') else ('U' if sex in ('J', 'U', '') else 'U')
+                    turtle_data_clean['id'] = service.generate_biology_id(gender, sheet_name)
                 created_id = service.create_turtle_data(turtle_data_clean, sheet_name, state, location)
                 if created_id:
                     return jsonify({

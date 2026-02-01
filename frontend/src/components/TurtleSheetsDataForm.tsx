@@ -30,7 +30,7 @@ import {
 import { MapDisplay } from './MapDisplay';
 import { notifications } from '@mantine/notifications';
 import type { TurtleSheetsData } from '../services/api';
-import { listSheets, createSheet } from '../services/api';
+import { listSheets, createSheet, generateTurtleId } from '../services/api';
 
 interface TurtleSheetsDataFormProps {
   initialData?: TurtleSheetsData;
@@ -98,6 +98,9 @@ export const TurtleSheetsDataForm = forwardRef<
     const [unlockConfirmField, setUnlockConfirmField] = useState<
       keyof TurtleSheetsData | null
     >(null);
+    /** In create mode: preview of auto-generated ID (gender + sequence number) */
+    const [idPreview, setIdPreview] = useState<string>('');
+    const [loadingIdPreview, setLoadingIdPreview] = useState(false);
 
     const isFieldModeRestricted = addOnlyMode && mode === 'edit';
     const isFieldUnlocked = (field: keyof TurtleSheetsData) => unlockedFields.has(field);
@@ -121,6 +124,36 @@ export const TurtleSheetsDataForm = forwardRef<
         setSelectedSheetName(initialSheetName);
       }
     }, [initialData, initialSheetName]);
+
+    // In create mode, fetch next biology ID when sex and sheet are selected (preview only; backend assigns on save)
+    useEffect(() => {
+      if (mode !== 'create') {
+        setIdPreview('');
+        return;
+      }
+      const sheetName = (selectedSheetName || '').trim();
+      const sex = (formData.sex || '').trim().toUpperCase();
+      if (!sheetName || !sex || !['M', 'F', 'J', 'U'].includes(sex)) {
+        setIdPreview('');
+        return;
+      }
+      let cancelled = false;
+      setLoadingIdPreview(true);
+      generateTurtleId({ sex, sheet_name: sheetName })
+        .then((res) => {
+          if (!cancelled && res.success && res.id) setIdPreview(res.id);
+          else if (!cancelled) setIdPreview('');
+        })
+        .catch(() => {
+          if (!cancelled) setIdPreview('');
+        })
+        .finally(() => {
+          if (!cancelled) setLoadingIdPreview(false);
+        });
+      return () => {
+        cancelled = true;
+      };
+    }, [mode, formData.sex, selectedSheetName]);
 
     useEffect(() => {
       // Load available sheets on mount with timeout
@@ -434,7 +467,14 @@ export const TurtleSheetsDataForm = forwardRef<
               </Grid.Col>
             )}
             <Grid.Col span={{ base: 12, md: 6 }}>
-              {isFieldModeRestricted && !isFieldUnlocked('id') ? (
+              {mode === 'create' ? (
+                <TextInput
+                  label='ID'
+                  value={loadingIdPreview ? '…' : idPreview || '—'}
+                  disabled
+                  description='Auto-generated from sex and sequence number for this sheet (assigned on save)'
+                />
+              ) : isFieldModeRestricted && !isFieldUnlocked('id') ? (
                 <>
                   <Group gap='xs' mb={4}>
                     <Button
@@ -450,7 +490,7 @@ export const TurtleSheetsDataForm = forwardRef<
                     label='ID'
                     value={formData.id || ''}
                     disabled
-                    description='Original turtle ID (may not be unique across sheets)'
+                    description='Biology ID (gender + sequence number)'
                   />
                 </>
               ) : (
@@ -459,7 +499,7 @@ export const TurtleSheetsDataForm = forwardRef<
                   placeholder='Original ID'
                   value={formData.id || ''}
                   onChange={(e) => handleChange('id', e.target.value)}
-                  description='Original turtle ID (may not be unique across sheets)'
+                  description='Biology ID (gender + sequence number)'
                 />
               )}
             </Grid.Col>
