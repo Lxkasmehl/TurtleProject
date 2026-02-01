@@ -535,6 +535,94 @@ def register_sheets_routes(app):
             print(f"Traceback:\n{error_trace}")
             return jsonify({'error': f'Failed to list turtles: {str(e)}'}), 500
 
+    @app.route('/api/sheets/turtle-names', methods=['GET'])
+    @require_admin
+    def list_turtle_names():
+        """
+        List all turtle names across all location sheets (Admin only).
+        Used by the frontend to prevent duplicate names when creating/editing turtles.
+        Returns name and primary_id so the form can allow the same name when editing the same turtle.
+        """
+        try:
+            try:
+                service = get_sheets_service()
+            except Exception as service_error:
+                print(f"Warning: Google Sheets service not available: {service_error}")
+                return jsonify({
+                    'success': True,
+                    'names': [],
+                    'message': 'Google Sheets service not configured'
+                })
+
+            if not service:
+                return jsonify({
+                    'success': True,
+                    'names': [],
+                    'message': 'Google Sheets service not configured'
+                })
+
+            sheets_to_search = service.list_sheets()
+            backup_sheet_names = ['Backup (Initial State)', 'Backup (Inital State)', 'Backup']
+            sheets_to_search = [s for s in sheets_to_search if s not in backup_sheet_names]
+
+            all_names = []
+            for sheet in sheets_to_search:
+                try:
+                    service._ensure_primary_id_column(sheet)
+                    escaped_sheet = sheet
+                    if any(char in sheet for char in [' ', '!', '@', '#', '$', '%', '^', '&', '*', '(', ')', '-', '+', '=']):
+                        escaped_sheet = f"'{sheet}'"
+                    range_name = f"{escaped_sheet}!A:Z"
+                    result = service.service.spreadsheets().values().get(
+                        spreadsheetId=service.spreadsheet_id,
+                        range=range_name
+                    ).execute()
+
+                    values = result.get('values', [])
+                    if len(values) < 2:
+                        continue
+
+                    headers = values[0]
+                    column_indices = {}
+                    for idx, header in enumerate(headers):
+                        if header and header.strip():
+                            column_indices[header.strip()] = idx
+
+                    primary_id_idx = column_indices.get('Primary ID')
+                    name_idx = column_indices.get('Name')
+                    if primary_id_idx is None and 'ID' in column_indices:
+                        primary_id_idx = column_indices.get('ID')
+                    if name_idx is None:
+                        continue
+
+                    for row_data in values[1:]:
+                        if not row_data:
+                            continue
+                        max_idx = max(primary_id_idx if primary_id_idx is not None else -1, name_idx)
+                        if len(row_data) <= max_idx:
+                            continue
+                        primary_id = (row_data[primary_id_idx] or '').strip() if primary_id_idx is not None else ''
+                        name = (row_data[name_idx] or '').strip() if name_idx is not None else ''
+                        if primary_id and name:
+                            all_names.append({'name': name, 'primary_id': primary_id})
+                except Exception as e:
+                    print(f"Error reading sheet {sheet} for turtle names: {e}")
+                    continue
+
+            return jsonify({
+                'success': True,
+                'names': all_names
+            })
+
+        except Exception as e:
+            error_trace = traceback.format_exc()
+            try:
+                print(f"Error listing turtle names: {str(e)}")
+            except UnicodeEncodeError:
+                print(f"[ERROR] Error listing turtle names: {str(e)}")
+            print(f"Traceback:\n{error_trace}")
+            return jsonify({'error': f'Failed to list turtle names: {str(e)}'}), 500
+
     @app.route('/api/sheets/migrate-ids', methods=['POST'])
     @require_admin
     def migrate_ids_to_primary_ids():

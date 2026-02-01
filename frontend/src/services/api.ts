@@ -762,6 +762,39 @@ export const createSheet = async (
   return await response.json();
 };
 
+// List all turtle names across sheets (for duplicate-name validation)
+export interface TurtleNameEntry {
+  name: string;
+  primary_id: string;
+}
+
+export interface ListTurtleNamesResponse {
+  success: boolean;
+  names: TurtleNameEntry[];
+  error?: string;
+}
+
+export const getTurtleNames = async (): Promise<ListTurtleNamesResponse> => {
+  const token = getToken();
+  const headers: Record<string, string> = {};
+
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
+
+  const response = await fetch(`${TURTLE_API_BASE_URL}/sheets/turtle-names`, {
+    method: 'GET',
+    headers,
+  });
+
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.error || 'Failed to list turtle names');
+  }
+
+  return await response.json();
+};
+
 // List all turtles from Google Sheets
 export interface ListTurtlesResponse {
   success: boolean;
