@@ -28,6 +28,14 @@ class TurtleDeepMatcher:
         # 3. LightGlue
         self.matcher = LightGlue(features='superpoint', depth_confidence=0.9, width_confidence=0.95).eval().to(
             self.device)
+        # 4. Load Dataset into Ram
+        self.feature_cache = {}
+
+
+    def set_feature_cache(self, cache_dict):
+        """Called by TurtleManager to push CPU-loaded features into the brain."""
+        self.feature_cache = cache_dict
+        logger.info(f"🧠 Brain: Feature cache synchronized ({len(cache_dict)} items).")
 
     def preprocess_image_robust(self, img):
         """
