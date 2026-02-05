@@ -6,6 +6,10 @@ Clears ALL data from the backend:
 - Uploaded data (Review Queue, Community Uploads)
 - Training data (.npz files)
 - Model files (vocabulary, indexes)
+
+Important: All index/vocab files in backend/turtles/ are removed together. That avoids
+the "unfitted vocab + old index" state which used to cause 500 on photo upload when
+data/ was cleared but only vlad_vocab.pkl was deleted (old turtles.index remained).
 """
 
 import os
@@ -166,12 +170,13 @@ def clear_training_data():
     
     print(f"   ✅ Deleted {npz_count} .npz files")
     
-    # Delete model files
+    # Delete all index/vocab files together (avoids "unfitted vocab + old index" → 500 on upload)
     model_files = [
         os.path.join(turtles_dir_path, 'vlad_vocab.pkl'),
         os.path.join(turtles_dir_path, 'turtles.index'),
         os.path.join(turtles_dir_path, 'global_vlad_array.npy'),
-        os.path.join(turtles_dir_path, 'metadata.pkl')
+        os.path.join(turtles_dir_path, 'metadata.pkl'),
+        os.path.join(turtles_dir_path, 'trained_kmeans_vocabulary.pkl'),
     ]
     
     model_count = 0

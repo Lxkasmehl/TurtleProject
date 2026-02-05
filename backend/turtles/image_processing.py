@@ -163,7 +163,11 @@ def smart_search(image_path, location_filter=None, k_results=20):
     index = GLOBAL_RESOURCES['faiss_index']
     metadata = GLOBAL_RESOURCES['metadata']
 
-    if not vocab or not index: return []
+    # Require valid vocab and index; skip search if vocab is not fitted (stale/corrupt file)
+    if not vocab or not index:
+        return []
+    if not getattr(vocab, 'cluster_centers_', None):
+        return []
 
     query_vector = process_new_image(image_path, vocab)
     if query_vector is None: return []
@@ -313,6 +317,7 @@ def rebuild_faiss_index_from_folders(data_directory, vocab_save_path=DEFAULT_VOC
                 if f.endswith(".npz"): all_npz.append(os.path.join(root, f))
 
         batch = []
+        vocab_was_fitted = False
         for i, fpath in enumerate(all_npz):
             try:
                 d = np.load(fpath, allow_pickle=True)
@@ -322,17 +327,27 @@ def rebuild_faiss_index_from_folders(data_directory, vocab_save_path=DEFAULT_VOC
                         indices = np.random.choice(len(des), 10000, replace=False)
                         des = des[indices]
                     batch.append(des)
-            except:
+            except Exception:
                 pass
 
             if len(batch) >= 100 or i == len(all_npz) - 1:
                 if batch:
                     kmeans_vocab.partial_fit(np.vstack(batch).astype('float32'))
+                    vocab_was_fitted = True
                     print(f"   Processed batch... ({i + 1}/{len(all_npz)})")
                     batch = []
-        joblib.dump(kmeans_vocab, vocab_save_path)
+        # Only save vocab if it was actually fitted. Otherwise an unfitted KMeans would
+        # cause 500 on first upload when predict() is called (e.g. empty data folder).
+        if vocab_was_fitted:
+            joblib.dump(kmeans_vocab, vocab_save_path)
+        else:
+            print("   No NPZ data in data/ - skipping vocab save. Add turtle reference data for matching.")
+            kmeans_vocab = None
 
-    # 3. Build Index
+    # 3. Build Index (only if we have a fitted vocab)
+    if kmeans_vocab is None:
+        print("   No vocabulary available - skipping index build. Add turtle reference data under data/ and restart.")
+        return None
     print("   Generating Index...")
     all_vlad = []
     final_meta = []
