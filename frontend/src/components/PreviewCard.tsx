@@ -84,6 +84,15 @@ export function PreviewCard({
     prevStillAtLocation.current = stillAtLocation;
   }, [stillAtLocation, requestLocationHint]);
 
+  // Default to "Skip" location when starting a new upload so multiple turtles don't share the same pin
+  const fileKey = files.length ? files[0]?.name ?? '' : '';
+  useEffect(() => {
+    setStillAtLocation(null);
+    setManualLat('');
+    setManualLon('');
+    if (setLocationHint) setLocationHint(null);
+  }, [fileKey, setLocationHint]);
+
   if (!preview) return null;
 
   return (

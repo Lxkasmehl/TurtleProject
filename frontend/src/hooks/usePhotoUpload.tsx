@@ -87,6 +87,7 @@ export function usePhotoUpload({
       setImageId(null);
       setIsDuplicate(false);
       setPreviousUploadDate(null);
+      setLocationHint(null);
 
       // Create preview
       const reader = new FileReader();
