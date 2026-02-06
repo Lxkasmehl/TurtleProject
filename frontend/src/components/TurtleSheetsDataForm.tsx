@@ -130,8 +130,8 @@ export const TurtleSheetsDataForm = forwardRef<
         setLoadingSheets(true);
 
         try {
-          // listSheets() now has built-in timeout (10 seconds)
-          const response = await listSheets(10000);
+          // listSheets() uses a 25s timeout so backend retries (e.g. Google API timeout) can complete
+          const response = await listSheets();
 
           // Check if component was unmounted
           if (cancelled) {

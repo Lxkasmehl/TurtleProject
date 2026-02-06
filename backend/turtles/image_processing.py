@@ -166,11 +166,16 @@ def smart_search(image_path, location_filter=None, k_results=20):
     # Require valid vocab and index; skip search if vocab is not fitted (stale/corrupt file)
     if not vocab or not index:
         return []
-    if not getattr(vocab, 'cluster_centers_', None):
+    centers = getattr(vocab, 'cluster_centers_', None)
+    if centers is None or (hasattr(centers, 'size') and centers.size == 0):
+        return []
+    # Empty index (e.g. no turtles yet): avoid FAISS search and return no matches
+    if hasattr(index, 'ntotal') and index.ntotal == 0:
         return []
 
     query_vector = process_new_image(image_path, vocab)
-    if query_vector is None: return []
+    if query_vector is None:
+        return []
 
     # When filtering by location, request more candidates so we have enough after filtering
     search_k = (k_results * 10) if location_filter else (k_results * 5)
@@ -179,10 +184,14 @@ def smart_search(image_path, location_filter=None, k_results=20):
     seen_sites = set()
 
     for i, idx in enumerate(idxs[0]):
-        if idx == -1 or idx >= len(metadata): continue
-        meta = metadata[idx]
-        # Restrict to given location (sheet/datasheet) when filter is set
-        if location_filter and meta.get('location') != location_filter:
+        # Use int() so we never use numpy scalar in list index; -1 means no match from FAISS
+        idx_int = int(idx)
+        if idx_int < 0 or idx_int >= len(metadata):
+            continue
+        meta = metadata[idx_int]
+        # Restrict to given location (sheet/datasheet) when filter is set.
+        # Compare as strings to avoid "truth value of array is ambiguous" if location is ever ndarray.
+        if location_filter and str(meta.get('location') or '') != str(location_filter):
             continue
         site_id = meta.get('site_id', 'Unknown')
         if site_id not in seen_sites:
@@ -221,7 +230,14 @@ def rerank_results_with_spatial_verification(query_image_path, initial_results):
 
         try:
             _, kp_candidate, des_candidate, _ = SIFT_from_file(candidate_path)
-            if des_candidate is None: continue
+            if des_candidate is None:
+                continue
+            # knnMatch with k=2 requires at least 2 train descriptors (e.g. single-turtle edge case)
+            n_train = des_candidate.shape[0] if hasattr(des_candidate, 'shape') else len(des_candidate)
+            if n_train < 2:
+                res['spatial_score'] = 0
+                verified_results.append(res)
+                continue
 
             matches = bf.knnMatch(des_query, des_candidate, k=2)
             good = [m for m, n in matches if m.distance < 0.75 * n.distance]
@@ -236,7 +252,8 @@ def rerank_results_with_spatial_verification(query_image_path, initial_results):
                 except AttributeError:
                     M, mask = cv.findHomography(src_pts, dst_pts, cv.RANSAC, 8.0)  # Fallback
 
-                if mask is not None: inliers = np.sum(mask)
+                if mask is not None:
+                    inliers = int(np.sum(mask))
 
             res['spatial_score'] = int(inliers)
             verified_results.append(res)
