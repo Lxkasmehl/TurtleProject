@@ -148,14 +148,11 @@ def register_review_routes(app):
                     try:
                         if new_location and new_turtle_id:
                             # New turtle created - create Sheets entry
-                            location_parts = new_location.split('/')
-                            if len(location_parts) >= 2:
-                                state = location_parts[0]
-                                location = location_parts[1]
-                            else:
-                                state = location_parts[0] if location_parts else ''
-                                location = ''
-                                
+                            # new_location is the sheet name (backend path); row content uses sheets_data
+                            sheet_name = (isinstance(sheets_data, dict) and sheets_data.get('sheet_name')) or new_location
+                            state = (isinstance(sheets_data, dict) and sheets_data.get('general_location')) or ''
+                            location = (isinstance(sheets_data, dict) and sheets_data.get('location')) or ''
+
                             # Check if frontend already created the entry (indicated by primary_id and sheet_name in sheets_data)
                             # IMPORTANT: Only skip if primary_id is present - if createTurtleSheetsData failed,
                             # primary_id won't be set, and we should create it in fallback mode
@@ -190,11 +187,7 @@ def register_review_routes(app):
                                     turtle_data['id'] = primary_id
                                 # Do not set general_location or location from state/location – leave empty if admin did not fill them; community location is for display only
                                 
-                                # Determine sheet_name from the turtle data or use a default
-                                sheet_name = sheets_data.get('sheet_name') if isinstance(sheets_data, dict) else 'Location A'
-                                
-                                # Debug: Log what data we're creating
-                                
+                                # sheet_name already set above (sheet tab name)
                                 service.create_turtle_data(turtle_data, sheet_name, state, location)
                                 print(f"✅ Created Google Sheets entry for new turtle {new_turtle_id} with Primary ID {primary_id} (fallback)")
                         elif match_turtle_id:

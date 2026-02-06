@@ -189,10 +189,12 @@ def smart_search(image_path, location_filter=None, k_results=20):
         if idx_int < 0 or idx_int >= len(metadata):
             continue
         meta = metadata[idx_int]
-        # Restrict to given location (sheet/datasheet) when filter is set.
-        # Compare as strings to avoid "truth value of array is ambiguous" if location is ever ndarray.
-        if location_filter and str(meta.get('location') or '') != str(location_filter):
-            continue
+        # Restrict to given sheet (tab name) when filter is set. Match only against sheet name = state or folder name from backend path, never the "Location" column from the sheet.
+        if location_filter:
+            state_val = str(meta.get('state') or '')
+            loc_val = str(meta.get('location') or '')
+            if state_val != str(location_filter) and loc_val != str(location_filter):
+                continue
         site_id = meta.get('site_id', 'Unknown')
         if site_id not in seen_sites:
             seen_sites.add(site_id)
@@ -287,6 +289,19 @@ def load_or_generate_persistent_data(data_directory):
     return True
 
 
+def rebuild_index_and_reload(data_directory):
+    """
+    Rebuild FAISS index and vocab from data_directory and reload GLOBAL_RESOURCES.
+    Call this after adding new reference data (e.g. new turtle) so the next search sees it.
+    """
+    global GLOBAL_RESOURCES
+    rebuild_faiss_index_from_folders(data_directory)
+    GLOBAL_RESOURCES['vocab'] = load_vocabulary(DEFAULT_VOCAB_PATH)
+    GLOBAL_RESOURCES['faiss_index'] = load_faiss_index(DEFAULT_INDEX_PATH)
+    GLOBAL_RESOURCES['metadata'] = load_metadata(DEFAULT_METADATA_PATH)
+    GLOBAL_RESOURCES['vlad_array'] = load_vlad_array(DEFAULT_VLAD_ARRAY_PATH)
+
+
 # Helper loaders
 def load_vocabulary(p): return joblib.load(p) if os.path.exists(p) else None
 
@@ -376,9 +391,11 @@ def rebuild_faiss_index_from_folders(data_directory, vocab_save_path=DEFAULT_VOC
                     parts = path.split(os.sep)
                     if 'ref_data' in parts:
                         idx = parts.index('ref_data')
-                        tid, loc = parts[idx - 1], parts[idx - 2]
+                        tid = parts[idx - 1]
+                        loc = parts[idx - 2]   # folder name (Location in State/Location)
+                        state = parts[idx - 3] if idx >= 3 else loc  # state name (sheet name in UI)
                     else:
-                        tid, loc = "Unknown", "Unknown"
+                        tid, loc, state = "Unknown", "Unknown", "Unknown"
 
                     d = np.load(path, allow_pickle=True)
                     des = d.get('descriptors')
@@ -389,7 +406,8 @@ def rebuild_faiss_index_from_folders(data_directory, vocab_save_path=DEFAULT_VOC
                     if des is not None and len(des) > 0:
                         vlad = compute_vlad(des, kmeans_vocab)
                         all_vlad.append(vlad)
-                        final_meta.append({'filename': f, 'file_path': path, 'site_id': tid, 'location': loc})
+                        # sheet_name_filter: value to match UI sheet (tab) name; use state (matches backend folders), never the "Location" column from the sheet
+                        final_meta.append({'filename': f, 'file_path': path, 'site_id': tid, 'location': loc, 'state': state})
                 except:
                     pass
 

@@ -423,13 +423,14 @@ export default function AdminTurtleRecordsPage() {
     }
     setProcessing(selectedItem.request_id);
     try {
+      // Backend path: always use sheet name only (never general_location/location from form).
+      // general_location and location are only for the Google Sheet row data.
+      const backendPathLocation = effectiveSheetName;
+
       const formState = effectiveSheetsData?.general_location || '';
       const formLocation = effectiveSheetsData?.location || '';
-      const finalLocation =
-        formState && formLocation ? `${formState}/${formLocation}` : effectiveSheetName;
-      const locationParts = finalLocation.split('/');
-      const turtleState = locationParts[0] || '';
-      const turtleLocation = locationParts.slice(1).join('/') || '';
+      const turtleState = formState || '';
+      const turtleLocation = formLocation || '';
       let finalPrimaryId = newTurtlePrimaryId;
       if (!finalPrimaryId) {
         try {
@@ -471,7 +472,7 @@ export default function AdminTurtleRecordsPage() {
       }
       const turtleIdForReview = finalPrimaryId || `T${Date.now()}`;
       await approveReview(selectedItem.request_id, {
-        new_location: finalLocation,
+        new_location: backendPathLocation,
         new_turtle_id: turtleIdForReview,
         uploaded_image_path: selectedItem.uploaded_image,
         sheets_data: effectiveSheetsData

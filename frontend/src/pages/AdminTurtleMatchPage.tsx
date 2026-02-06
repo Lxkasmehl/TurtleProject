@@ -316,15 +316,14 @@ export default function AdminTurtleMatchPage() {
 
     setProcessing(true);
     try {
-      // Extract state and location from form data
+      // Backend path: always use sheet name only (never general_location/location from form).
+      // general_location and location are only for the Google Sheet row data.
+      const backendPathLocation = effectiveSheetName;
+
       const formState = effectiveSheetsData?.general_location || '';
       const formLocation = effectiveSheetsData?.location || '';
-      const finalLocation =
-        formState && formLocation ? `${formState}/${formLocation}` : effectiveSheetName;
-
-      const locationParts = finalLocation.split('/');
-      const turtleState = locationParts[0] || '';
-      const turtleLocation = locationParts.slice(1).join('/') || '';
+      const turtleState = formState || '';
+      const turtleLocation = formLocation || '';
 
       // Generate primary ID if not already generated
       let finalPrimaryId = newTurtlePrimaryId;
@@ -383,7 +382,7 @@ export default function AdminTurtleMatchPage() {
       const turtleIdForReview = finalPrimaryId || `T${Date.now()}`;
 
       await approveReview(imageId, {
-        new_location: finalLocation,
+        new_location: backendPathLocation,
         new_turtle_id: turtleIdForReview,
         uploaded_image_path: matchData.uploaded_image_path,
         sheets_data: effectiveSheetsData
